@@ -1,7 +1,7 @@
 # Course Project: 3D Object Camera Tracking in VR / MR Headsets
 
 Simplification: 
-- traseck a aruco tag in camera space and transform to world space using headt pose
+- track an aruco tag in camera space and transform to world space using head pose
 - get raw image from cameras, pass onto GPU to do the warp
 - write CUDA kernels to process the aruco code detection and tracking
 - also send headset pose to GPU with time code
@@ -17,15 +17,6 @@ Simplification:
 
 
 # To Build
-run:
-
-```
-mkdir build
-cd build
-cmake -G "Unix Makefiles" ../
-make 
-```
-
 
 
 ## compile OpenCV with CUDA support
@@ -61,3 +52,6 @@ cmake -D CMAKE_BUILD_TYPE=Release \
 -D WITH_GSTREAMER=ON \
 -D WITH_TBB=ON ../
 ```
+
+
+compile with cmake and c++
