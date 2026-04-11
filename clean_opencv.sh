@@ -2,5 +2,5 @@
 
 cd external/opencv
 
-echo "removing opencv_build directory..."
-rm -r opencv_build
+echo "removing external/opencv/build directory..."
+rm -r ./build
