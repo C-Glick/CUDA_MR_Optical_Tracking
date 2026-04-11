@@ -2,7 +2,7 @@
 
 cd ./external/opencv
 
-cmake -S ./ -B ./opencv_build \
+cmake -S ./ -B ./build \
     -D CMAKE_BUILD_TYPE=Release \
     -D CMAKE_INSTALL_PREFIX=/usr/local \
     -D OPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules/ \
@@ -25,6 +25,6 @@ cmake -S ./ -B ./opencv_build \
 
 echo "=============Building OpenCV... ============="
 
-cd ./opencv_build
+cd ./build
 
 make -j $(nproc)
