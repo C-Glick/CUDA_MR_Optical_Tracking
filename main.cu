@@ -8,6 +8,7 @@
 #include <opencv2/core/cuda.hpp>
 #include "Cuda_Func.cuh"
 #include <opencv2/calib3d.hpp>
+#include <opencv2/imgproc.hpp>
 
 using namespace cv;
 int main(const int argc, char** argv)
@@ -33,9 +34,9 @@ int main(const int argc, char** argv)
     }
 
 
-    openVRTest();
+    //openVRTest();
     //openCvImageTest(argv[1]);
-    //openCvCameraTest();
+    openCvCameraTest();
     //executeGpuTestKernel();
 
     return 0;
@@ -68,12 +69,19 @@ void openVRTest()
     vr::TrackedCameraHandle_t cameraHandle;
     auto image = Mat(2, 2, CV_8UC4);
 
+    vr::EVRTrackedCameraError error;
+
+    vr::HmdVector2_t focalLength;
+    vr::HmdVector2_t center;
+
+    error = vr::VRTrackedCamera()->GetCameraIntrinsics(vr::k_unTrackedDeviceIndex_Hmd,
+        vr::Eye_Left, vr::VRTrackedCameraFrameType_Undistorted, &focalLength, &center);
 
     if (!hasCamera)
     {
         std::cout << "Error no camera detected in OpenVR" << std::endl;
     }
-    auto error = trackedCamera->AcquireVideoStreamingService(vr::k_unTrackedDeviceIndex_Hmd, &cameraHandle);
+    error = trackedCamera->AcquireVideoStreamingService(vr::k_unTrackedDeviceIndex_Hmd, &cameraHandle);
     //size the image buffer
     vr::VRTextureBounds_t texture_bounds;
     uint32_t width = 1920;
@@ -163,8 +171,17 @@ void openCvCameraTest()
     namedWindow("Right Camera Image", WINDOW_AUTOSIZE);
 
 
-    while (waitKey(25) == -1)
+    float cameraIntrinsics[3][3];
+    //cameraIntrinsics[2][2] = 1.0f;
+
+    //cv::fisheye::calibrate()
+    std::vector<cv::Mat> leftCalibrationImages;
+    std::vector<cv::Mat> rightCalibrationImages;
+
+    bool cameraActive = true;
+    while (cameraActive) //escape key
     {
+
         capture >> image;
         leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
         rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
@@ -175,11 +192,125 @@ void openCvCameraTest()
             break;
         }
 
-        imshow("Display Camera Image", image);
+        cv::Mat correctedImage;
+        //cv::fisheye::undistortImage(leftImage, correctedImage, )
+
+        //imshow("Display Camera Image", image);
         imshow("Left Camera Image", leftImage);
         imshow("Right Camera Image", rightImage);
 
+        int keyPress = waitKey(25);
+        if (keyPress == 27) // escape key
+        {
+            //end camera capture
+            cameraActive = false;
+            break;
+        }
+        else if (keyPress == 32) // space bar
+        {
+            //save image to calibration array
+            cv::Mat leftImageCopy;
+            cv::Mat rightImageCopy;
+            leftImage.copyTo(leftImageCopy);
+            rightImage.copyTo(rightImageCopy);
+            leftCalibrationImages.emplace_back(leftImageCopy);
+            rightCalibrationImages.emplace_back(rightImageCopy);
+
+        }
+
     }
+
+    //debug show images
+    // for (int i=0; i < leftCalibrationImages.size(); i++)
+    // {
+    //     std::string name = "Window " + std::to_string(i);
+    //
+    //     namedWindow(name, WINDOW_AUTOSIZE);
+    //     imshow(name, leftCalibrationImages[i]);
+    // }
+    //
+    // while (waitKey(25) == -1)
+    // {
+    //     for (int i=0; i < leftCalibrationImages.size(); i++)
+    //     {
+    //         std::string name = "Window " + std::to_string(i);
+    //         imshow(name, leftCalibrationImages[i]);
+    //     }
+    // }
+
+    //process calibration images
+
+    const cv::Size CHECKERBOARD(6, 9);
+
+    // Prepare object points (0,0,0), (1,0,0), ..., (5,8,0)
+    std::vector<cv::Point3f> objp;
+    for (int i = 0; i < CHECKERBOARD.height; i++)
+    {
+        for (int j = 0; j < CHECKERBOARD.width; j++)
+        {
+            objp.emplace_back(j, i, 0);
+        }
+    }
+
+    std::vector<std::vector<cv::Point2f>> imagePoints; // 2d points in image plane
+    std::vector<std::vector<cv::Point3f>> objPoints; // 3d points in world space
+
+    Size imageSize;
+
+
+    for (int i = 0; i < leftCalibrationImages.size(); i++)
+    {
+        imageSize = leftCalibrationImages[i].size();
+        //convert image to greyscale
+
+        Mat leftGrey;
+        cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
+        Mat rightGrey;
+        cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
+
+
+        //find the chess border corners
+        Mat corners;
+        int result = cv::findChessboardCorners(leftGrey, CHECKERBOARD, corners,
+            CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_FAST_CHECK + CALIB_CB_NORMALIZE_IMAGE);
+        if (result != 0)
+        {
+            //successfully found corners, refine result and add to calibration data
+            cornerSubPix(leftGrey, corners, Size(3,3), Size(-1,-1),
+                TermCriteria(TermCriteria::Type::EPS, TermCriteria::MAX_ITER, 0.1));
+            //place image corners into points array
+            imagePoints.emplace_back(corners);
+            //make space for corresponding world space points
+            objPoints.emplace_back(objp);
+        }
+    }
+
+    //solve calibration
+    Mat K = Mat::zeros(3, 3, CV_64F);
+    Mat D = Mat::zeros(4, 1, CV_64F);
+
+    int NumImages = static_cast<int>(objPoints.size());
+
+    std::vector<cv::Mat> rvecs, tvecs;
+
+    cv::fisheye::calibrate(objPoints, imagePoints, imageSize, K, D, rvecs, tvecs,
+        fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
+        cv::TermCriteria(
+            cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
+            30,
+            1e-6
+        )
+        );
+
+
+    //print results
+    std::cout << NumImages << " images used for calibration" << std::endl;
+    std::cout << "K = " << K << std::endl;
+    std::cout << "D = " << D << std::endl;
+
+
+    //use calibration results to undistort an image
+
 
     capture.release();
     destroyAllWindows();
