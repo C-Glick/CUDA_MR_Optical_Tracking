@@ -16,10 +16,6 @@
 using namespace cv;
 int main(const int argc, char** argv)
 {
-    if (argc != 2) {
-        printf("usage: <exe> <Image_Path>\n");
-        return -1;
-    }
 
     int cudaDevices = cuda::getCudaEnabledDeviceCount();
     std::cout << cv::getBuildInformation() << std::endl;
