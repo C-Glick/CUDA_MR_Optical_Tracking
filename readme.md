@@ -8,50 +8,31 @@ Simplification:
 - transform camera relative position to world position
 - send position back to application and use to render item
 
-## Dependencies
+## Prerequisite Dependencies
 - C++ toolchain
-- opengl (using GLAD to generate (https://gen.glad.sh/#generator=c&api=gl%3D4.6%2Cglx%3D1.4&profile=gl%3Dcore%2Cgles1%3Dcommon&extensions=GL_EXT_depth_bounds_test%2CGL_OVR_multiview&options=LOADER))
 - cmake
-- OpenXR SDK: https://github.com/KhronosGroup/OpenXR-SDK (TODO this might be pulled dynamically and built by the cmake script)
-- OpenCV: https://docs.opencv.org/4.x/df/d65/tutorial_table_of_content_introduction.html https://docs.opencv.org/4.x/d7/d9f/tutorial_linux_install.html or install on linux using `apt install libopencv-dev`
-
+- CUDA https://developer.nvidia.com/cuda/toolkit
+- cuDNN https://developer.nvidia.com/cudnn
 
 # To Build
 
+## Ensure all gitmodules are checked out
+- run `git submodule init` and `git submodule update`
+
 
 ## compile OpenCV with CUDA support
-
-new approach, compile openCV with Cuda support and include built files in project. Currently built under git/opencv using below command. Cmake will then use find_package command an point to build folder to include.
-
-
-
-https://gist.github.com/minhhieutruong0705/8f0ec70c400420e0007c15c98510f133
-
-build OpenCV with CUDA support and cuDNN support (python support disabled)
-
+- build OpenCV with CUDA support and cuDNN support (python support disabled)
 (CUDA and cuDNN need to be installed before hand)
+- OpenCV takes a while to compile with all the extra modules so be aware this can take some time
 
-```
-cmake -D CMAKE_BUILD_TYPE=Release \
--D CMAKE_INSTALL_PREFIX=/usr/local \
--D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules/ \
--D BUILD_opencv_python3=OFF \
--D OPENCV_GENERATE_PKGCONFIG=ON \
--D OPENCV_PC_FILE_NAME=opencv.pc \
--D WITH_CUDA=ON \
--D WITH_CUDNN=ON \
--D OPENCV_DNN_CUDA=ON \
--D CUDA_ARCH_BIN=7.5 \
--D ENABLE_FAST_MATH=ON \
--D CUDA_FAST_MATH=ON \
--D WITH_CUFFT=ON \
--D WITH_CUBLAS=ON \
--D WITH_V4L=ON \
--D WITH_OPENCL=ON \
--D WITH_OPENGL=ON \
--D WITH_GSTREAMER=ON \
--D WITH_TBB=ON ../
-```
+- run `./compile_opencv.sh` from the root of the project, "CUDA_MR_Optical_Tracking". This will configure and compile OpenCV in the external/opencv folder.
+
+## compile project
+- Run cmake on the root of the project, `cmake -S ./ -B ./cmake-build-release -D CMAKE_BUILD_TYPE=Release` or `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
+- Next run `make -C ./cmake-build-release` to compile project
+- If compilation is successful run project with command `./cmake-build-release/CUDA_MR_Optical_Tracking`
 
 
-compile with cmake and c++
+# clean project
+- From the root of the project run `./clean_root.sh` this will remove the root project clean  
+- From the root of the project run `./clean_opencv.sh` this will remove the opencv build directory

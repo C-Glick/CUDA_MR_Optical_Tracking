@@ -3,6 +3,7 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/opencv" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/opencv_contrib" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/openvr" vcs="Git" />
   </component>
 </project>

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 3.28)
 project(CUDA_MR_Optical_Tracking CXX CUDA)
 
 #execute_process(COMMAND ../compile_opencv.sh
