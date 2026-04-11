@@ -10,6 +10,9 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
 
+#define ESCAPE_KEY 27
+#define SPACE_KEY 32
+
 using namespace cv;
 int main(const int argc, char** argv)
 {
@@ -160,7 +163,6 @@ void openCvCameraTest()
     Mat image;
     Mat leftImage, rightImage;
 
-    //cv::fisheye::calibrate()
 
     if (capture.isOpened() == false)
     {
@@ -171,17 +173,11 @@ void openCvCameraTest()
     namedWindow("Right Camera Image", WINDOW_AUTOSIZE);
 
 
-    float cameraIntrinsics[3][3];
-    //cameraIntrinsics[2][2] = 1.0f;
-
-    //cv::fisheye::calibrate()
     std::vector<cv::Mat> leftCalibrationImages;
     std::vector<cv::Mat> rightCalibrationImages;
 
-    bool cameraActive = true;
-    while (cameraActive) //escape key
+    while (true)
     {
-
         capture >> image;
         leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
         rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
@@ -192,21 +188,17 @@ void openCvCameraTest()
             break;
         }
 
-        cv::Mat correctedImage;
-        //cv::fisheye::undistortImage(leftImage, correctedImage, )
-
         //imshow("Display Camera Image", image);
         imshow("Left Camera Image", leftImage);
         imshow("Right Camera Image", rightImage);
 
         int keyPress = waitKey(25);
-        if (keyPress == 27) // escape key
+        if (keyPress == ESCAPE_KEY) // escape key
         {
             //end camera capture
-            cameraActive = false;
             break;
         }
-        else if (keyPress == 32) // space bar
+        else if (keyPress == SPACE_KEY) // space bar
         {
             //save image to calibration array
             cv::Mat leftImageCopy;
@@ -215,7 +207,6 @@ void openCvCameraTest()
             rightImage.copyTo(rightImageCopy);
             leftCalibrationImages.emplace_back(leftImageCopy);
             rightCalibrationImages.emplace_back(rightImageCopy);
-
         }
 
     }
@@ -257,12 +248,10 @@ void openCvCameraTest()
 
     Size imageSize;
 
-
     for (int i = 0; i < leftCalibrationImages.size(); i++)
     {
         imageSize = leftCalibrationImages[i].size();
         //convert image to greyscale
-
         Mat leftGrey;
         cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
         Mat rightGrey;
@@ -279,9 +268,9 @@ void openCvCameraTest()
             cornerSubPix(leftGrey, corners, Size(3,3), Size(-1,-1),
                 TermCriteria(TermCriteria::Type::EPS, TermCriteria::MAX_ITER, 0.1));
             //place image corners into points array
-            imagePoints.emplace_back(corners);
+            imagePoints.push_back(corners);
             //make space for corresponding world space points
-            objPoints.emplace_back(objp);
+            objPoints.push_back(objp);
         }
     }
 
@@ -311,6 +300,14 @@ void openCvCameraTest()
 
     //use calibration results to undistort an image
 
+    Mat correctedImage;
+    fisheye::undistortImage(leftCalibrationImages[0], correctedImage, K, D);
+
+    namedWindow("Corrected Image");
+    while (waitKey(100) != ESCAPE_KEY)
+    {
+        imshow("Corrected Image", correctedImage);
+    }
 
     capture.release();
     destroyAllWindows();
