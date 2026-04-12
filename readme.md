@@ -28,9 +28,12 @@ Simplification:
 - run `./compile_opencv.sh` from the root of the project, "CUDA_MR_Optical_Tracking". This will configure and compile OpenCV in the external/opencv folder.
 
 ## compile project
-- Run cmake on the root of the project, `cmake -S ./ -B ./cmake-build-release -D CMAKE_BUILD_TYPE=Release` or `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
-- Next run `make -C ./cmake-build-release` to compile project
-- If compilation is successful run project with command `./cmake-build-release/CUDA_MR_Optical_Tracking`
+- Run `run.sh` in the root of the project, this uses cmake to configure and compile the project. It will then execute with recommended command line arguments.
+- The built binary is located in the "cmake-build-*" folder and can be run with custom command line arguments
+- To compile manually instead of using `run.sh` :
+    - Run cmake on the root of the project, `cmake -S ./ -B ./cmake-build-release -D CMAKE_BUILD_TYPE=Release` or `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
+    - Next run `make -C ./cmake-build-release` to compile project
+    - If compilation is successful run project with command `./cmake-build-release/CUDA_MR_Optical_Tracking`
 
 
 # clean project

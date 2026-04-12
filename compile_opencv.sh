@@ -25,6 +25,4 @@ cmake -S ./ -B ./build \
 
 echo "=============Building OpenCV... ============="
 
-cd ./build
-
-make -j $(nproc)
+cmake --build ./build -j $(nproc)
