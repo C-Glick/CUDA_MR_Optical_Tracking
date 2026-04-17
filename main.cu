@@ -12,6 +12,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "external/nlohmann/json.hpp"
+using json = nlohmann::json;
 
 #define ESCAPE_KEY 27
 #define SPACE_KEY 32
@@ -158,8 +159,7 @@ void openCvImageTest(const std::string& imgPath)
 
 void saveCameraCalibrationToFile(Mat K, Mat D, Mat newK)
 {
-    nlohmann::json j;
-
+    json j;
     //convert OpenCV matrices to 2D arrays which work nicely with json library
     std::vector<std::vector<float>> kArray;
     for (int i = 0; i < K.rows; i++) {
@@ -181,7 +181,6 @@ void saveCameraCalibrationToFile(Mat K, Mat D, Mat newK)
         newK.row(i).copyTo(row);
         newKArray.push_back(row);
     }
-
     j["K"] = kArray;
     j["D"] = dArray;
     j["newK"] = newKArray;
@@ -191,13 +190,30 @@ void saveCameraCalibrationToFile(Mat K, Mat D, Mat newK)
 }
 
 
-void readCameraCalibrationFromFile()
+void readCameraCalibrationFromFile(Mat* K, Mat* D, Mat* newK)
 {
+    std::ifstream i("camera_calibration.json");
+    json data = json::parse(i);
 
+    std::vector<std::vector<double>> kArray = data["K"];
+    std::vector<std::vector<double>> dArray = data["D"];
+    std::vector<std::vector<double>> newKArray = data["newK"];
+
+    //convert to OpenCV matrix
+    *K = Mat(kArray.size(), kArray[0].size(), CV_64F, kArray.data());
+    *D = Mat(dArray.size(), dArray[0].size(), CV_64F, dArray.data());
+    *newK = Mat(newKArray.size(), newKArray[0].size(), CV_64F, newKArray.data());
 }
 
 void openCvCameraTest()
 {
+
+    //todo mechanise to use previous values.
+    Mat prevK;
+    Mat prevD;
+    Mat prevNewK;
+    readCameraCalibrationFromFile(&prevK, &prevD, &prevNewK);
+
     //TODO allow the index to change so we can select the correct camera(s)
     VideoCapture capture(0);
     Mat image;
@@ -321,6 +337,7 @@ void openCvCameraTest()
     //solve calibration
     Mat K = Mat::zeros(3, 3, CV_64F);
     Mat D = Mat::zeros(4, 1, CV_64F);
+
 
     int NumImages = static_cast<int>(objPoints.size());
 
