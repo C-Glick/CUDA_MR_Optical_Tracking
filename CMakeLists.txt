@@ -13,6 +13,11 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 
 
 set(CMAKE_CXX_STANDARD 20)
+#
+#cmake_policy(SET CMP0167 NEW)
+#find_package(Boost REQUIRED)
+#target_link_libraries(${PROJECT_NAME} PRIVATE ${Boost_LIBRARIES})
+#target_include_directories(${PROJECT_NAME} PRIVATE ${Boost_INCLUDE_DIRS})
 
 # ==== OpenVR ====
 

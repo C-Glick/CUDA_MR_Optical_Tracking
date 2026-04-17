@@ -227,7 +227,7 @@ void openCvCameraTest()
 
     //process calibration images
 
-    const cv::Size CHECKERBOARD(6, 9);
+    const cv::Size CHECKERBOARD(9, 6);
 
     // Prepare object points (0,0,0), (1,0,0), ..., (5,8,0)
     std::vector<cv::Point3f> objp;
@@ -255,18 +255,22 @@ void openCvCameraTest()
 
 
         //find the chess border corners
-        Mat corners;
+        std::vector<Point2f> corners;
         int result = cv::findChessboardCorners(leftGrey, CHECKERBOARD, corners,
             CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_FAST_CHECK + CALIB_CB_NORMALIZE_IMAGE);
-        if (result != 0)
+        if (result != 0 && corners.size() == CHECKERBOARD.area())
         {
             //successfully found corners, refine result and add to calibration data
             cornerSubPix(leftGrey, corners, Size(3,3), Size(-1,-1),
-                TermCriteria(TermCriteria::Type::EPS, TermCriteria::MAX_ITER, 0.1));
+                TermCriteria(TermCriteria::Type::EPS + TermCriteria::MAX_ITER, 30, 0.1));
             //place image corners into points array
             imagePoints.push_back(corners);
             //make space for corresponding world space points
             objPoints.push_back(objp);
+
+            drawChessboardCorners(leftGrey, CHECKERBOARD, corners, result);
+            imshow("coners", leftGrey);
+            waitKey(50000);
         }
     }
 
@@ -278,7 +282,7 @@ void openCvCameraTest()
 
     std::vector<cv::Mat> rvecs, tvecs;
 
-    cv::fisheye::calibrate(objPoints, imagePoints, imageSize, K, D, rvecs, tvecs,
+    double calibration_result = cv::fisheye::calibrate(objPoints, imagePoints, imageSize, K, D, rvecs, tvecs,
         fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
         cv::TermCriteria(
             cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
@@ -289,20 +293,35 @@ void openCvCameraTest()
 
 
     //print results
+    std::cout << "Calibration result score (less than 1 = good): " << calibration_result << std::endl;
     std::cout << NumImages << " images used for calibration" << std::endl;
     std::cout << "K = " << K << std::endl;
     std::cout << "D = " << D << std::endl;
 
+    //find the new camera intrinsic matrix for undistortion and rectification
+    Mat newK;
+    fisheye::estimateNewCameraMatrixForUndistortRectify(K, D, imageSize, Matx33d::eye(), newK, 1.0);
 
     //use calibration results to undistort an image
-
     Mat correctedImage;
-    fisheye::undistortImage(leftCalibrationImages[0], correctedImage, K, D);
+    fisheye::undistortImage(leftCalibrationImages[0], correctedImage, K, D, newK);
 
     namedWindow("Corrected Image");
-    while (waitKey(100) != ESCAPE_KEY)
+    namedWindow("Live Uncorrected Image");
+    namedWindow("Live Corrected Image");
+    Mat liveCorrectedImage;
+    while (waitKey(10) != ESCAPE_KEY)
     {
         imshow("Corrected Image", correctedImage);
+
+        capture >> image;
+        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
+
+        imshow("Live Uncorrected Image", leftImage);
+        fisheye::undistortImage(leftImage, liveCorrectedImage, K, D, newK);
+
+        imshow("Live Corrected Image", liveCorrectedImage);
     }
 
     capture.release();
