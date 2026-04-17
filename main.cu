@@ -1,6 +1,7 @@
 #include "main.cuh"
 
 //#include <opencv2/opencv.hpp>
+#include <fstream>
 #include <thread>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -9,6 +10,8 @@
 #include "Cuda_Func.cuh"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
+
+#include "external/nlohmann/json.hpp"
 
 #define ESCAPE_KEY 27
 #define SPACE_KEY 32
@@ -150,6 +153,47 @@ void openCvImageTest(const std::string& imgPath)
 
     waitKey(0);
     destroyAllWindows();
+}
+
+
+void saveCameraCalibrationToFile(Mat K, Mat D, Mat newK)
+{
+    nlohmann::json j;
+
+    //convert OpenCV matrices to 2D arrays which work nicely with json library
+    std::vector<std::vector<float>> kArray;
+    for (int i = 0; i < K.rows; i++) {
+        std::vector<float> row;
+        K.row(i).copyTo(row);
+        kArray.push_back(row);
+    }
+
+    std::vector<std::vector<float>> dArray;
+    for (int i = 0; i < D.rows; i++) {
+        std::vector<float> row;
+        D.row(i).copyTo(row);
+        dArray.push_back(row);
+    }
+
+    std::vector<std::vector<float>> newKArray;
+    for (int i = 0; i < newK.rows; i++) {
+        std::vector<float> row;
+        newK.row(i).copyTo(row);
+        newKArray.push_back(row);
+    }
+
+    j["K"] = kArray;
+    j["D"] = dArray;
+    j["newK"] = newKArray;
+
+    std::ofstream out("camera_calibration.json");
+    out << std::setw(4) << j << std::endl;
+}
+
+
+void readCameraCalibrationFromFile()
+{
+
 }
 
 void openCvCameraTest()
@@ -323,6 +367,8 @@ void openCvCameraTest()
 
         imshow("Live Corrected Image", liveCorrectedImage);
     }
+
+    saveCameraCalibrationToFile(K, D, newK);
 
     capture.release();
     destroyAllWindows();

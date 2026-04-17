@@ -7,12 +7,14 @@ project(CUDA_MR_Optical_Tracking CXX CUDA)
 add_executable(${PROJECT_NAME} main.cu
         Cuda_Func.cu
         Cuda_Func.cuh
-        main.cuh)
+        main.cuh
+        external/nlohmann/json.hpp)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 
 
 set(CMAKE_CXX_STANDARD 20)
+
 #
 #cmake_policy(SET CMP0167 NEW)
 #find_package(Boost REQUIRED)
