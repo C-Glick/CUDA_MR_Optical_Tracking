@@ -213,7 +213,13 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
     j["newKLeft"] = newKLeftArray;
     j["newKRight"] = newKRightArray;
 
+
+    std::filesystem::create_directories(CALIBRATION_PATH);
     std::ofstream out((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+    if (!out.is_open())
+    {
+        std::cerr << "Failed to open file " << CALIBRATION_PATH << "/" << CALIBRATION_FILE<< std::endl;
+    }
     out << std::setw(4) << j << std::endl;
     out.close();
 
@@ -230,6 +236,8 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
 
     if (calibrationImages != nullptr)
     {
+        std::cout << "Saving images to disk ..." << std::endl;
+
         int i=0;
         for (Mat image : *calibrationImages)
         {
@@ -313,11 +321,14 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
 
 
     std::cout << "Calibrating cameras ..." << std::endl;
-    std::cout << "Load calibration images from disk? " << CALIBRATION_PATH << " (Y/N)" <<  std::endl;
     bool loadCalibrationImagesFromFile = false;
-    std::string response;
-    std::cin >> response;
-    loadCalibrationImagesFromFile = (response == "y" || response == "Y");
+    if (std::filesystem::exists(CALIBRATION_PATH))
+    {
+        std::cout << "Load calibration images from disk? " << CALIBRATION_PATH << " (Y/N)" <<  std::endl;
+        std::string response;
+        std::cin >> response;
+        loadCalibrationImagesFromFile = (response == "y" || response == "Y");
+    }
 
     if (loadCalibrationImagesFromFile)
     {
@@ -386,6 +397,8 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
                 leftCalibrationImages.emplace_back(leftImage.clone());
                 rightCalibrationImages.emplace_back(rightImage.clone());
                 combinedCalibrationImages.emplace_back(image.clone());
+
+                std::cout << "Captured calibration frame #" << std::to_string(combinedCalibrationImages.size() - 1) << std::endl;
             }
         }
         capture.release();
@@ -508,6 +521,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     destroyAllWindows();
 
     std::cout << "Calibration complete. Save to disk? (Y/N)" << std::endl;
+    std::string response;
     std::cin >> response;
 
     if (response == "Y" || response == "y")
