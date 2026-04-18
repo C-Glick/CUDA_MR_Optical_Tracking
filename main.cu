@@ -585,16 +585,16 @@ void openCvCameraTest()
 
 
     VideoCapture capture(0);
-    Mat image;
-    Mat leftImage, rightImage;
+    UMat image;
+    UMat leftImage, rightImage;
     if (capture.isOpened() == false)
     {
         std::cerr << "ERROR: Could not open camera." << std::endl;
     }
 
     //use calibration results to undistort live camera feed
-    Mat correctedLeftImage;
-    Mat correctedRightImage;
+    UMat correctedLeftImage;
+    UMat correctedRightImage;
 
     namedWindow("Corrected Left Image");
     namedWindow("Corrected Right Image");
