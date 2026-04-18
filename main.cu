@@ -8,6 +8,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/cudacodec.hpp>
 #include "Cuda_Func.cuh"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
@@ -43,6 +44,12 @@ int main(const int argc, char** argv)
         std::cerr << "ERROR: CUDA driver is not installed or incompatible." << std::endl;
     }
 
+    cuda::setDevice(0);
+
+#ifndef HAVE_OPENCV_CUDACODEC
+    cout << "OpenCV was built without CUDA Video decoding support\n" << std::endl;
+    exit(1);
+#endif
 
     //openVRTest();
     //openCvImageTest(argv[1]);
@@ -163,17 +170,16 @@ void openCvImageTest(const std::string& imgPath)
     destroyAllWindows();
 }
 
-
-//TODO refactor
-void copyMatTo2dVector(const Mat* mat, std::vector<std::vector<double>>* vect)
+std::vector<std::vector<double>> copyMatTo2dVector(const Mat* mat)
 {
+    auto vect = std::vector<std::vector<double>>();
     for (int i = 0; i < mat->rows; i++) {
         std::vector<double> row;
         mat->row(i).copyTo(row);
-        vect->push_back(row);
+        vect.push_back(row);
     }
+    return vect;
 }
-
 
 Mat copy2dVectorToMat(const std::vector<std::vector<double>>& vect)
 {
@@ -191,20 +197,14 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
 {
     json j;
     //convert OpenCV matrices to 2D arrays which work nicely with json library
-    std::vector<std::vector<double>> kLeftArray;
-    copyMatTo2dVector(kLeft, &kLeftArray);
-    std::vector<std::vector<double>> dLeftArray; //TODO should D be a normal vector instead of vector of vectors
-    copyMatTo2dVector(dLeft, &dLeftArray);
+    auto kLeftArray = copyMatTo2dVector(kLeft);
+    auto dLeftArray = copyMatTo2dVector(dLeft);
 
-    std::vector<std::vector<double>> kRightArray;
-    copyMatTo2dVector(kRight, &kRightArray);
-    std::vector<std::vector<double>> dRightArray;
-    copyMatTo2dVector(dRight, &dRightArray);
+    auto kRightArray = copyMatTo2dVector(kRight);
+    auto dRightArray = copyMatTo2dVector(dRight);
 
-    std::vector<std::vector<double>> newKLeftArray;
-    copyMatTo2dVector(newKLeft, &newKLeftArray);
-    std::vector<std::vector<double>> newKRightArray;
-    copyMatTo2dVector(newKRight, &newKRightArray);
+    auto newKLeftArray = copyMatTo2dVector(newKLeft);
+    auto newKRightArray = copyMatTo2dVector(newKRight);
 
     j["kLeft"] = kLeftArray;
     j["dLeft"] = dLeftArray;
@@ -212,7 +212,6 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
     j["dRight"] = dRightArray;
     j["newKLeft"] = newKLeftArray;
     j["newKRight"] = newKRightArray;
-
 
     std::filesystem::create_directories(CALIBRATION_PATH);
     std::ofstream out((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
@@ -364,12 +363,15 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         VideoCapture capture(0);
         Mat image;
         Mat leftImage, rightImage;
+
+
+        // cuda::GpuMat device_image;
+        // Ptr<cudacodec::VideoReader> device_capture = cudacodec::
         if (capture.isOpened() == false)
         {
             std::cerr << "ERROR: Could not open camera." << std::endl;
         }
-        namedWindow("Display Camera Image", WINDOW_AUTOSIZE);
-
+        namedWindow("Display Camera Image", WINDOW_NORMAL | WINDOW_OPENGL);
         while (true)
         {
             capture >> image;
