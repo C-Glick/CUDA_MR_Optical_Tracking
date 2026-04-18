@@ -3,6 +3,8 @@
 //#include <opencv2/opencv.hpp>
 #include <fstream>
 #include <thread>
+#include <string>
+#include <format>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -16,6 +18,12 @@ using json = nlohmann::json;
 
 #define ESCAPE_KEY 27
 #define SPACE_KEY 32
+
+#define CALIBRATION_PATH "./camera_calibration"
+#define CALIBRATION_FILE "calibration_params.json"
+#define CALIBRATION_IMAGE_FILE "calibration_image_" //calibration_image_001.png
+
+const cv::Size CHECKERBOARD(9, 6); // calibration pattern checkerboard size
 
 using namespace cv;
 int main(const int argc, char** argv)
@@ -157,139 +165,174 @@ void openCvImageTest(const std::string& imgPath)
 }
 
 
-void saveCameraCalibrationToFile(Mat K, Mat D, Mat newK)
+void copyMatTo2dVector(const Mat* mat, std::vector<std::vector<float>>* vect)
+{
+    for (int i = 0; i < mat->rows; i++) {
+        std::vector<float> row;
+        mat->row(i).copyTo(row);
+        vect->push_back(row);
+    }
+}
+
+void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
+    Mat* newKLeft, Mat* newKRight, std::vector<cv::Mat>* calibrationImages)
 {
     json j;
     //convert OpenCV matrices to 2D arrays which work nicely with json library
-    std::vector<std::vector<float>> kArray;
-    for (int i = 0; i < K.rows; i++) {
-        std::vector<float> row;
-        K.row(i).copyTo(row);
-        kArray.push_back(row);
-    }
+    std::vector<std::vector<float>> kLeftArray;
+    copyMatTo2dVector(kLeft, &kLeftArray);
+    std::vector<std::vector<float>> dLeftArray;
+    copyMatTo2dVector(dLeft, &dLeftArray);
 
-    std::vector<std::vector<float>> dArray;
-    for (int i = 0; i < D.rows; i++) {
-        std::vector<float> row;
-        D.row(i).copyTo(row);
-        dArray.push_back(row);
-    }
+    std::vector<std::vector<float>> kRightArray;
+    copyMatTo2dVector(kRight, &kRightArray);
+    std::vector<std::vector<float>> dRightArray;
+    copyMatTo2dVector(dRight, &dRightArray);
 
-    std::vector<std::vector<float>> newKArray;
-    for (int i = 0; i < newK.rows; i++) {
-        std::vector<float> row;
-        newK.row(i).copyTo(row);
-        newKArray.push_back(row);
-    }
-    j["K"] = kArray;
-    j["D"] = dArray;
-    j["newK"] = newKArray;
+    std::vector<std::vector<float>> newKLeftArray;
+    copyMatTo2dVector(newKLeft, &newKLeftArray);
+    std::vector<std::vector<float>> newKRightArray;
+    copyMatTo2dVector(newKRight, &newKRightArray);
 
-    std::ofstream out("camera_calibration.json");
+    j["kLeft"] = kLeftArray;
+    j["dLeft"] = dLeftArray;
+    j["kRight"] = kRightArray;
+    j["dRight"] = dRightArray;
+    j["newKLeft"] = newKLeftArray;
+    j["newKRight"] = newKRightArray;
+
+    std::ofstream out((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
     out << std::setw(4) << j << std::endl;
+
+    std::cout << "Calibration saved to disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
+
+    if (calibrationImages != nullptr)
+    {
+        int i=0;
+        for (Mat image : *calibrationImages)
+        {
+            std::string fileName = format((std::string(CALIBRATION_PATH) + "/" + CALIBRATION_IMAGE_FILE + "{:03}" + ".png").c_str(), i);
+            std::vector<int> compression_params;
+            compression_params.push_back(IMWRITE_PNG_COMPRESSION);
+            compression_params.push_back(6);
+
+            imwrite(fileName,image, compression_params);
+        }
+
+        std::cout << "Raw calibration images saved to disk " << CALIBRATION_PATH << std::endl;
+    }
 }
 
 
-void readCameraCalibrationFromFile(Mat* K, Mat* D, Mat* newK)
+void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
+    Mat* newKLeft, Mat* newKRight)
 {
-    std::ifstream i("camera_calibration.json");
-    json data = json::parse(i);
+    std::ifstream inFile((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+    json jData = json::parse(inFile);
 
-    std::vector<std::vector<double>> kArray = data["K"];
-    std::vector<std::vector<double>> dArray = data["D"];
-    std::vector<std::vector<double>> newKArray = data["newK"];
+    std::vector<std::vector<double>> kLeftArray = jData["kLeft"];
+    std::vector<std::vector<double>> dLeftArray = jData["dLeft"];
+    std::vector<std::vector<double>> kRightArray = jData["kRight"];
+    std::vector<std::vector<double>> dRightArray = jData["dRight"];
+    std::vector<std::vector<double>> newKLeftArray = jData["newKLeft"];
+    std::vector<std::vector<double>> newKRightArray = jData["newKRight"];
 
     //convert to OpenCV matrix
-    *K = Mat(kArray.size(), kArray[0].size(), CV_64F, kArray.data());
-    *D = Mat(dArray.size(), dArray[0].size(), CV_64F, dArray.data());
-    *newK = Mat(newKArray.size(), newKArray[0].size(), CV_64F, newKArray.data());
+    *kLeft = Mat(kLeftArray.size(), kLeftArray[0].size(), CV_64F, kLeftArray.data());
+    *dLeft = Mat(dLeftArray.size(), dLeftArray[0].size(), CV_64F, dLeftArray.data());
+    *kRight = Mat(kRightArray.size(), kRightArray[0].size(), CV_64F, kRightArray.data());
+    *dRight = Mat(dRightArray.size(), dRightArray[0].size(), CV_64F, dRightArray.data());
+    *newKLeft = Mat(newKLeftArray.size(), newKLeftArray[0].size(), CV_64F, newKLeftArray.data());
+    *newKRight = Mat(newKRightArray.size(), newKRightArray[0].size(), CV_64F, newKRightArray.data());
+
+    std::cout << "Calibration read from disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
 }
 
-void openCvCameraTest()
+bool checkForCameraCalibration()
 {
-
-    //todo mechanise to use previous values.
-    Mat prevK;
-    Mat prevD;
-    Mat prevNewK;
-    readCameraCalibrationFromFile(&prevK, &prevD, &prevNewK);
-
-    //TODO allow the index to change so we can select the correct camera(s)
-    VideoCapture capture(0);
-    Mat image;
-    Mat leftImage, rightImage;
+    std::ifstream inFile((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+    bool result = inFile.is_open();
+    inFile.close();
+    return result;
+}
 
 
-    if (capture.isOpened() == false)
-    {
-        std::cerr << "ERROR: Could not open camera." << std::endl;
-    }
-    namedWindow("Display Camera Image", WINDOW_AUTOSIZE);
-    namedWindow("Left Camera Image", WINDOW_AUTOSIZE);
-    namedWindow("Right Camera Image", WINDOW_AUTOSIZE);
-
-
+void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* newKLeft, Mat* newKRight)
+{
     std::vector<cv::Mat> leftCalibrationImages;
     std::vector<cv::Mat> rightCalibrationImages;
+    std::vector<cv::Mat> combinedCalibrationImages;
 
-    while (true)
+
+    std::cout << "Calibrating cameras ..." << std::endl;
+    std::cout << "Load calibration images from disk? " << CALIBRATION_PATH << " (Y/N)" <<  std::endl;
+    bool loadCalibrationFromFile = false;
+    std::string response;
+    std::cin >> response;
+    loadCalibrationFromFile = (response == "y" || response == "Y");
+
+    if (loadCalibrationFromFile)
     {
-        capture >> image;
-        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
-        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
 
-        if (image.empty())
+    }
+    else
+    {
+        std::cout << "Starting camera ..." << std::endl;
+        //todo can we do a partially obscure calibration pattern
+        std::cout << "Hold calibration sheet in full view of both cameras." << std::endl;
+        std::cout << "Press <space bar> to capture calibration frame." << std::endl;
+        std::cout << "Move calibration sheet to different areas of the camera and tilt.";
+        std::cout << "Capture between 10 and 30 calibration images";
+        std::cout << "Press <ESC> once finished.";
+
+        //start up headset camera and capture calibration images
+        //TODO allow the index to change so we can select the correct camera(s)
+        VideoCapture capture(0);
+        Mat image;
+        Mat leftImage, rightImage;
+        if (capture.isOpened() == false)
         {
-            std::cerr << "ERROR: blank frame" << std::endl;
-            break;
+            std::cerr << "ERROR: Could not open camera." << std::endl;
         }
+        namedWindow("Display Camera Image", WINDOW_AUTOSIZE);
 
-        //imshow("Display Camera Image", image);
-        imshow("Left Camera Image", leftImage);
-        imshow("Right Camera Image", rightImage);
+        while (true)
+        {
+            capture >> image;
+            //break image in half for left and right eye
+            leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+            rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
 
-        int keyPress = waitKey(25);
-        if (keyPress == ESCAPE_KEY) // escape key
-        {
-            //end camera capture
-            break;
-        }
-        else if (keyPress == SPACE_KEY) // space bar
-        {
-            //save image to calibration array
-            cv::Mat leftImageCopy;
-            cv::Mat rightImageCopy;
-            leftImage.copyTo(leftImageCopy);
-            rightImage.copyTo(rightImageCopy);
-            leftCalibrationImages.emplace_back(leftImageCopy);
-            rightCalibrationImages.emplace_back(rightImageCopy);
+            if (image.empty())
+            {
+                std::cerr << "ERROR: blank frame" << std::endl;
+                continue;
+            }
+
+            imshow("Display Camera Image", image);
+
+            int keyPress = waitKey(25);
+            if (keyPress == ESCAPE_KEY) // escape key
+            {
+                //end camera capture
+                break;
+            }
+            else if (keyPress == SPACE_KEY) // space bar
+            {
+                //save image to calibration array
+                leftCalibrationImages.push_back(leftImage);
+                rightCalibrationImages.push_back(rightImage);
+                combinedCalibrationImages.push_back(image);
+            }
+
+            capture.release();
         }
 
     }
-
-    //debug show images
-    // for (int i=0; i < leftCalibrationImages.size(); i++)
-    // {
-    //     std::string name = "Window " + std::to_string(i);
-    //
-    //     namedWindow(name, WINDOW_AUTOSIZE);
-    //     imshow(name, leftCalibrationImages[i]);
-    // }
-    //
-    // while (waitKey(25) == -1)
-    // {
-    //     for (int i=0; i < leftCalibrationImages.size(); i++)
-    //     {
-    //         std::string name = "Window " + std::to_string(i);
-    //         imshow(name, leftCalibrationImages[i]);
-    //     }
-    // }
 
     //process calibration images
 
-    const cv::Size CHECKERBOARD(9, 6);
-
-    // Prepare object points (0,0,0), (1,0,0), ..., (5,8,0)
+    // Prepare object points (0,0,0), (1,0,0), ..., (5,8,0) These are the calibration points in the xy plane of the calibration sheet
     std::vector<cv::Point3f> objp;
     for (int i = 0; i < CHECKERBOARD.height; i++)
     {
@@ -299,96 +342,200 @@ void openCvCameraTest()
         }
     }
 
-    std::vector<std::vector<cv::Point2f>> imagePoints; // 2d points in image plane
+    std::vector<std::vector<cv::Point2f>> imagePointsLeft; // 2d points in image plane of the calibration points
+    std::vector<std::vector<cv::Point2f>> imagePointsRight;
     std::vector<std::vector<cv::Point3f>> objPoints; // 3d points in world space
 
     Size imageSize;
 
-    for (int i = 0; i < leftCalibrationImages.size(); i++)
+    for (int i = 0; i < combinedCalibrationImages.size(); i++)
     {
         imageSize = leftCalibrationImages[i].size();
-        //convert image to greyscale
+        //convert images to greyscale
         Mat leftGrey;
         cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
         Mat rightGrey;
         cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
 
-
         //find the chess border corners
-        std::vector<Point2f> corners;
-        int result = cv::findChessboardCorners(leftGrey, CHECKERBOARD, corners,
+        std::vector<Point2f> cornersLeft;
+        int cornersResultLeft = cv::findChessboardCorners(leftGrey, CHECKERBOARD, cornersLeft,
             CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_FAST_CHECK + CALIB_CB_NORMALIZE_IMAGE);
-        if (result != 0 && corners.size() == CHECKERBOARD.area())
+        std::vector<Point2f> cornersRight;
+        int cornersResultRight = cv::findChessboardCorners(rightGrey, CHECKERBOARD, cornersRight,
+            CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_FAST_CHECK + CALIB_CB_NORMALIZE_IMAGE);
+
+        //TODO only accepting images that have the pattern fully visible in both camera images, do a partial calibration
+        if (cornersResultLeft != 0 && cornersLeft.size() == CHECKERBOARD.area() &&
+            cornersResultRight != 0 && cornersRight.size() == CHECKERBOARD.area())
         {
             //successfully found corners, refine result and add to calibration data
-            cornerSubPix(leftGrey, corners, Size(3,3), Size(-1,-1),
+            cornerSubPix(leftGrey, cornersLeft, Size(3,3), Size(-1,-1),
                 TermCriteria(TermCriteria::Type::EPS + TermCriteria::MAX_ITER, 30, 0.1));
+            cornerSubPix(rightGrey, cornersRight, Size(3,3), Size(-1,-1),
+                TermCriteria(TermCriteria::Type::EPS + TermCriteria::MAX_ITER, 30, 0.1));
+
             //place image corners into points array
-            imagePoints.push_back(corners);
-            //make space for corresponding world space points
+            imagePointsLeft.push_back(cornersLeft);
+            imagePointsRight.push_back(cornersRight);
+
+            //allocate corresponding world space points
             objPoints.push_back(objp);
 
-            drawChessboardCorners(leftGrey, CHECKERBOARD, corners, result);
-            imshow("coners", leftGrey);
+            //todo debug enable to show images
+            drawChessboardCorners(leftGrey, CHECKERBOARD, cornersLeft, cornersResultLeft);
+            drawChessboardCorners(rightGrey, CHECKERBOARD, cornersRight, cornersResultRight);
+
+            imshow("Left image", leftGrey);
+            imshow("Right image", rightGrey);
+
             waitKey(50000);
         }
     }
 
     //solve calibration
-    Mat K = Mat::zeros(3, 3, CV_64F);
-    Mat D = Mat::zeros(4, 1, CV_64F);
+    *kLeft = Mat::zeros(3, 3, CV_64F);
+    *kRight = Mat::zeros(3, 3, CV_64F);
 
+    *dLeft = Mat::zeros(4, 1, CV_64F);
+    *dRight = Mat::zeros(4, 1, CV_64F);
 
     int NumImages = static_cast<int>(objPoints.size());
 
     std::vector<cv::Mat> rvecs, tvecs;
+    Mat stereoCameraRotation;
+    Mat stereoCameraTranslation;
 
-    double calibration_result = cv::fisheye::calibrate(objPoints, imagePoints, imageSize, K, D, rvecs, tvecs,
+    // double calibration_result = cv::fisheye::calibrate(objPoints, imagePointsLeft, imageSize, K, D, rvecs, tvecs,
+    //     fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
+    //     cv::TermCriteria(
+    //         cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
+    //         30,
+    //         1e-6
+    //     )
+    //     );
+
+    double calibration_result = cv::fisheye::stereoCalibrate(objPoints, imagePointsLeft, imagePointsRight,
+        *kLeft, *dLeft, *kRight, *dRight, imageSize, stereoCameraRotation, stereoCameraTranslation, rvecs, tvecs,
         fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
         cv::TermCriteria(
-            cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
-            30,
-            1e-6
-        )
-        );
+           cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
+           30,
+           1e-6
+       )
+       );
 
 
     //print results
     std::cout << "Calibration result score (less than 1 = good): " << calibration_result << std::endl;
     std::cout << NumImages << " images used for calibration" << std::endl;
-    std::cout << "K = " << K << std::endl;
-    std::cout << "D = " << D << std::endl;
+    std::cout << "K Left = " << *kLeft << std::endl;
+    std::cout << "D Left = " << *dLeft << std::endl << std::endl;
 
-    //find the new camera intrinsic matrix for undistortion and rectification
-    Mat newK;
-    fisheye::estimateNewCameraMatrixForUndistortRectify(K, D, imageSize, Matx33d::eye(), newK, 1.0);
+    std::cout << "K Right = " << *kRight << std::endl;
+    std::cout << "D Right = " << *dRight << std::endl;
 
-    //use calibration results to undistort an image
-    Mat correctedImage;
-    fisheye::undistortImage(leftCalibrationImages[0], correctedImage, K, D, newK);
+    //find the camera's new intrinsic matrix for undistortion and rectification
+    fisheye::estimateNewCameraMatrixForUndistortRectify(*kLeft, *dLeft, imageSize, Matx33d::eye(), *newKLeft, 1.0);
+    fisheye::estimateNewCameraMatrixForUndistortRectify(*kRight, *dRight, imageSize, Matx33d::eye(), *newKRight, 1.0);
 
-    namedWindow("Corrected Image");
-    namedWindow("Live Uncorrected Image");
-    namedWindow("Live Corrected Image");
-    Mat liveCorrectedImage;
-    while (waitKey(10) != ESCAPE_KEY)
+
+    std::cout << "Calibration complete. Save to disk? (Y/N)" << std::endl;
+    std::cin >> response;
+
+    if (response == "Y" || response == "y")
     {
-        imshow("Corrected Image", correctedImage);
-
-        capture >> image;
-        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
-        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
-
-        imshow("Live Uncorrected Image", leftImage);
-        fisheye::undistortImage(leftImage, liveCorrectedImage, K, D, newK);
-
-        imshow("Live Corrected Image", liveCorrectedImage);
+        std::cout << "Include raw calibration images? (Y/N)" << std::endl;
+        std::cin >> response;
+        if (response == "Y" || response == "y")
+        {
+            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, &combinedCalibrationImages);
+        }else
+        {
+            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, nullptr);
+        }
     }
 
-    saveCameraCalibrationToFile(K, D, newK);
 
-    capture.release();
     destroyAllWindows();
+}
+
+void openCvCameraTest()
+{
+
+    //todo mechanise to use previous values.
+    Mat camCalKLeft;
+    Mat camCalDLeft;
+
+    Mat camCalKRight;
+    Mat camCalDRight;
+
+    Mat camCalNewKLeft;
+    Mat camCalNewKRight;
+
+    bool doCameraCalibration = true;
+
+    if (checkForCameraCalibration())
+    {
+        std::cout << "Camera calibration file found. Would you like to load calibration parameters from disk? (y/n)" << std::endl;
+        std::string response;
+        std::cin >> response;
+        if (response == "y" || response == "Y")
+        {
+            doCameraCalibration = false;
+        }else
+        {
+            doCameraCalibration = true;
+        }
+    }
+
+    if (doCameraCalibration)
+    {
+        calibrateCameras(&camCalKLeft, &camCalDLeft, &camCalKRight, &camCalDRight,
+            &camCalNewKLeft, &camCalNewKRight);
+    }else
+    {
+        readCameraCalibrationFromFile(&camCalKLeft, &camCalDLeft, &camCalKRight, &camCalDRight,
+            &camCalNewKLeft, &camCalNewKRight);
+    }
+
+
+    // VideoCapture capture(0);
+    // Mat image;
+    // Mat leftImage, rightImage;
+    // if (capture.isOpened() == false)
+    // {
+    //     std::cerr << "ERROR: Could not open camera." << std::endl;
+    // }
+    // namedWindow("Display Camera Image", WINDOW_AUTOSIZE);
+    //
+    // while (true)
+    // {
+    //     capture >> image;
+
+    //use calibration results to undistort an image
+    // Mat correctedImage;
+    // fisheye::undistortImage(leftCalibrationImages[0], correctedImage, K, D, newK);
+    //
+    // namedWindow("Corrected Image");
+    // namedWindow("Live Uncorrected Image");
+    // namedWindow("Live Corrected Image");
+    // Mat liveCorrectedImage;
+    // while (waitKey(10) != ESCAPE_KEY)
+    // {
+    //     imshow("Corrected Image", correctedImage);
+    //
+    //     capture >> image;
+    //     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+    //     rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
+    //
+    //     imshow("Live Uncorrected Image", leftImage);
+    //     fisheye::undistortImage(leftImage, liveCorrectedImage, K, D, newK);
+    //
+    //     imshow("Live Corrected Image", liveCorrectedImage);
+    // }
+
+
 }
 
 void executeGpuTestKernel()
