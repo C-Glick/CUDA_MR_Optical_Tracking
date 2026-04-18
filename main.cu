@@ -281,9 +281,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         //todo can we do a partially obscure calibration pattern
         std::cout << "Hold calibration sheet in full view of both cameras." << std::endl;
         std::cout << "Press <space bar> to capture calibration frame." << std::endl;
-        std::cout << "Move calibration sheet to different areas of the camera and tilt.";
-        std::cout << "Capture between 10 and 30 calibration images";
-        std::cout << "Press <ESC> once finished.";
+        std::cout << "Move calibration sheet to different areas of the camera and tilt." << std:: endl;
+        std::cout << "Capture between 10 and 30 calibration images" << std::endl;
+        std::cout << "Press <ESC> once finished." << std::endl;
 
         //start up headset camera and capture calibration images
         //TODO allow the index to change so we can select the correct camera(s)
@@ -320,14 +320,12 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
             else if (keyPress == SPACE_KEY) // space bar
             {
                 //save image to calibration array
-                leftCalibrationImages.push_back(leftImage);
-                rightCalibrationImages.push_back(rightImage);
-                combinedCalibrationImages.push_back(image);
+                leftCalibrationImages.emplace_back(leftImage.clone());
+                rightCalibrationImages.emplace_back(rightImage.clone());
+                combinedCalibrationImages.emplace_back(image.clone());
             }
-
-            capture.release();
         }
-
+        capture.release();
     }
 
     //process calibration images
@@ -425,6 +423,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
        )
        );
 
+    //find the camera's new intrinsic matrix for undistortion and rectification
+    fisheye::estimateNewCameraMatrixForUndistortRectify(*kLeft, *dLeft, imageSize, Matx33d::eye(), *newKLeft, 1.0);
+    fisheye::estimateNewCameraMatrixForUndistortRectify(*kRight, *dRight, imageSize, Matx33d::eye(), *newKRight, 1.0);
 
     //print results
     std::cout << "Calibration result score (less than 1 = good): " << calibration_result << std::endl;
@@ -433,11 +434,13 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     std::cout << "D Left = " << *dLeft << std::endl << std::endl;
 
     std::cout << "K Right = " << *kRight << std::endl;
-    std::cout << "D Right = " << *dRight << std::endl;
+    std::cout << "D Right = " << *dRight << std::endl << std::endl;
 
-    //find the camera's new intrinsic matrix for undistortion and rectification
-    fisheye::estimateNewCameraMatrixForUndistortRectify(*kLeft, *dLeft, imageSize, Matx33d::eye(), *newKLeft, 1.0);
-    fisheye::estimateNewCameraMatrixForUndistortRectify(*kRight, *dRight, imageSize, Matx33d::eye(), *newKRight, 1.0);
+    std::cout << "Stereo camera rotation = " << stereoCameraRotation << std::endl;
+    std::cout << "Stereo camera translation = " << stereoCameraTranslation << std::endl << std::endl;
+
+    std::cout << "New K left camera intrinsics = " << *newKLeft << std::endl;
+    std::cout << "New K right camera intrinsics = " << *newKRight << std::endl;
 
 
     std::cout << "Calibration complete. Save to disk? (Y/N)" << std::endl;
