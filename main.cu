@@ -9,6 +9,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/cudacodec.hpp>
+#include <opencv2/cudaimgproc.hpp>
 #include "Cuda_Func.cuh"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
@@ -595,6 +596,8 @@ void openCvCameraTest()
     //use calibration results to undistort live camera feed
     UMat correctedLeftImage;
     UMat correctedRightImage;
+
+
 
     namedWindow("Corrected Left Image");
     namedWindow("Corrected Right Image");
