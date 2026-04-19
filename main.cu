@@ -5,6 +5,7 @@
 #include <thread>
 #include <string>
 #include <opencv2/core.hpp>
+#include <opencv2/core/opengl.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/core/cuda.hpp>
@@ -47,8 +48,13 @@ int main(const int argc, char** argv)
 
     cuda::setDevice(0);
 
+#ifndef HAVE_OPENGL
+    std::cout << "OpenCV was built without OpenGL support\n" << std::endl;
+    exit(1);
+#endif
+
 #ifndef HAVE_OPENCV_CUDACODEC
-    cout << "OpenCV was built without CUDA Video decoding support\n" << std::endl;
+    std::cout << "OpenCV was built without CUDA Video decoding support\n" << std::endl;
     exit(1);
 #endif
 
@@ -597,24 +603,52 @@ void openCvCameraTest()
     UMat correctedLeftImage;
     UMat correctedRightImage;
 
+    // namedWindow("Corrected Left Image");
+    // namedWindow("Corrected Right Image");
+
+    namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
+
+    capture >> image;
+
+    //upload image to GPU
+    int imageBytes = image.step * image.rows;
+
+    //allocate memory on gpu
+    uchar *gpuImage;
+    cudaMalloc((void**)&gpuImage, imageBytes);
+    cuda::GpuMat gMat;
+    gMat.data = gpuImage;
+
+    //upload distortion parameters to GPU
 
 
-    namedWindow("Corrected Left Image");
-    namedWindow("Corrected Right Image");
     while (waitKey(16) != ESCAPE_KEY)
     {
+
+        //TODO look into using multiple cuda streams and multiple images in pipeline
         capture >> image;
-        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
-        fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+        //send image to gpu
+        cudaMemcpy(gpuImage, image.u->data, imageBytes, cudaMemcpyHostToDevice);
 
-        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
-        fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
+        // leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+        // fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+        //
+        // rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
+        // fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
 
-        imshow("Corrected Left Image", correctedLeftImage);
-        imshow("Corrected Right Image", correctedRightImage);
+        //copy image back to host
+        //cudaMemcpy(image.u->data, gpuImage, imageBytes, cudaMemcpyDeviceToHost);
+
+        cudaDeviceSynchronize();
+
+        imshow("GPU Image", ogl::Texture2D(gMat));
+
+        // imshow("Corrected Left Image", correctedLeftImage);
+        // imshow("Corrected Right Image", correctedRightImage);
     }
 
     capture.release();
+    cudaFree(gpuImage);
 }
 
 void executeGpuTestKernel()
