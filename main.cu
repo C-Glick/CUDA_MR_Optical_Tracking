@@ -16,6 +16,10 @@
 #include <opencv2/imgproc.hpp>
 #include <format>
 
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <cuda_gl_interop.h>
+
 #include "external/nlohmann/json.hpp"
 using json = nlohmann::json;
 
@@ -158,7 +162,7 @@ void openVRTest()
 
 }
 
-void on_draw(void* param) {
+void onOpenGlDraw(void* param) {
     cv::ogl::Texture2D* tex = (cv::ogl::Texture2D*)param;
     // Enable texturing and bind the texture object
     //glEnable(GL_TEXTURE_2D);
@@ -175,7 +179,7 @@ void openCvImageTest(const std::string& imgPath)
     namedWindow("OpenGL Display Test Image", WINDOW_OPENGL);
     ogl::Texture2D openGlTexture;
     openGlTexture.copyFrom(image);
-    setOpenGlDrawCallback("OpenGL Display Test Image", on_draw, &openGlTexture);
+    setOpenGlDrawCallback("OpenGL Display Test Image", onOpenGlDraw, &openGlTexture);
     //imshow("OpenGL Display Test Image", image);
     if (!image.data) {
         printf("No image data\n");
@@ -622,17 +626,25 @@ void openCvCameraTest()
 
     //upload image to GPU
     int imageBytes = image.step * image.rows;
+    int imageWidth = 1920;
+    int imageHeight = 960;
+
+    resizeWindow("GPU Image", imageWidth, imageHeight);
 
     //allocate memory on gpu
     uchar *gpuImage;
-    cudaMalloc((void**)&gpuImage, imageBytes);
+    gpuErrchk(cudaMalloc((void**)&gpuImage, imageBytes));
 
     ogl::Texture2D openGlTexture;
     openGlTexture.copyFrom(image);
-    setOpenGlDrawCallback("GPU Image", on_draw, &openGlTexture);
+    setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTexture);
 
-    //cuda::GpuMat gMat;
-    //gMat.data = gpuImage;
+    //setup texture so CUDA and OpenGL can talk to each other
+    cudaGraphicsResource_t cudaImageHandle;
+    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaImageHandle, openGlTexture.texId(),
+        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //TODO cudaGraphicsRegisterFlagsWriteDiscard
+
+    gpuErrchk(cudaPeekAtLastError());
 
     //upload distortion parameters to GPU
 
@@ -644,6 +656,37 @@ void openCvCameraTest()
         capture >> image;
         //send image to gpu
         openGlTexture.copyFrom(image);
+
+        //give cuda control of the texture
+        gpuErrchk(cudaGraphicsMapResources(1, &cudaImageHandle));
+        cudaArray_t imageArrayHandle;
+        gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageArrayHandle, cudaImageHandle, 0, 0));
+        cudaResourceDesc resourceDesc = cudaResourceDesc();
+        resourceDesc.resType = cudaResourceTypeArray;
+        resourceDesc.res.array.array = imageArrayHandle;
+
+        cudaSurfaceObject_t surface;
+        cudaCreateSurfaceObject(&surface, &resourceDesc);
+
+
+        //launch kernel
+        //1800 blocks with 1024 threads each
+
+        dim3 threadsPerBlock(32,32);
+        dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                  (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+        GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surface, image.cols, image.rows);
+        gpuErrchk(cudaPeekAtLastError());
+
+        //give control of the texture back to opengl to display
+        gpuErrchk( cudaDestroySurfaceObject(surface));
+        gpuErrchk( cudaGraphicsUnmapResources(1, &cudaImageHandle));
+
+        //wait for cuda to finish processing
+        gpuErrchk( cudaDeviceSynchronize());
+
+        //trigger opengl to display
         updateWindow("GPU Image");
         //cudaMemcpy(gpuImage, image.u->data, imageBytes, cudaMemcpyHostToDevice);
 
