@@ -48,11 +48,6 @@ int main(const int argc, char** argv)
 
     cuda::setDevice(0);
 
-#ifndef HAVE_OPENGL
-    std::cout << "OpenCV was built without OpenGL support\n" << std::endl;
-    exit(1);
-#endif
-
 #ifndef HAVE_OPENCV_CUDACODEC
     std::cout << "OpenCV was built without CUDA Video decoding support\n" << std::endl;
     exit(1);
@@ -163,11 +158,25 @@ void openVRTest()
 
 }
 
+void on_draw(void* param) {
+    cv::ogl::Texture2D* tex = (cv::ogl::Texture2D*)param;
+    // Enable texturing and bind the texture object
+    //glEnable(GL_TEXTURE_2D);
+    tex->bind();
+
+    // Use OpenCV's helper to render the texture to the current window
+    // This draws a screen-aligned quad by default
+    cv::ogl::render(*tex);
+}
+
 void openCvImageTest(const std::string& imgPath)
 {
     const Mat image = imread(imgPath, IMREAD_COLOR);
-    namedWindow("Display Test Image", WINDOW_AUTOSIZE);
-    imshow("Display Test Image", image);
+    namedWindow("OpenGL Display Test Image", WINDOW_OPENGL);
+    ogl::Texture2D openGlTexture;
+    openGlTexture.copyFrom(image);
+    setOpenGlDrawCallback("OpenGL Display Test Image", on_draw, &openGlTexture);
+    //imshow("OpenGL Display Test Image", image);
     if (!image.data) {
         printf("No image data\n");
         return;
@@ -378,7 +387,8 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         {
             std::cerr << "ERROR: Could not open camera." << std::endl;
         }
-        namedWindow("Display Camera Image", WINDOW_NORMAL | WINDOW_OPENGL);
+        namedWindow("Display Camera Image", WINDOW_NORMAL);
+        resizeWindow("Display Camera Image", 1920, 960);
         while (true)
         {
             capture >> image;
@@ -616,8 +626,13 @@ void openCvCameraTest()
     //allocate memory on gpu
     uchar *gpuImage;
     cudaMalloc((void**)&gpuImage, imageBytes);
-    cuda::GpuMat gMat;
-    gMat.data = gpuImage;
+
+    ogl::Texture2D openGlTexture;
+    openGlTexture.copyFrom(image);
+    setOpenGlDrawCallback("GPU Image", on_draw, &openGlTexture);
+
+    //cuda::GpuMat gMat;
+    //gMat.data = gpuImage;
 
     //upload distortion parameters to GPU
 
@@ -628,7 +643,9 @@ void openCvCameraTest()
         //TODO look into using multiple cuda streams and multiple images in pipeline
         capture >> image;
         //send image to gpu
-        cudaMemcpy(gpuImage, image.u->data, imageBytes, cudaMemcpyHostToDevice);
+        openGlTexture.copyFrom(image);
+        updateWindow("GPU Image");
+        //cudaMemcpy(gpuImage, image.u->data, imageBytes, cudaMemcpyHostToDevice);
 
         // leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
         // fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
@@ -639,9 +656,9 @@ void openCvCameraTest()
         //copy image back to host
         //cudaMemcpy(image.u->data, gpuImage, imageBytes, cudaMemcpyDeviceToHost);
 
-        cudaDeviceSynchronize();
+        //cudaDeviceSynchronize();
 
-        imshow("GPU Image", ogl::Texture2D(gMat));
+        //imshow("GPU Image", ogl::Texture2D(gMat));
 
         // imshow("Corrected Left Image", correctedLeftImage);
         // imshow("Corrected Right Image", correctedRightImage);
@@ -649,6 +666,8 @@ void openCvCameraTest()
 
     capture.release();
     cudaFree(gpuImage);
+
+    destroyAllWindows();
 }
 
 void executeGpuTestKernel()

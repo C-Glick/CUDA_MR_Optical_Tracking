@@ -9,10 +9,16 @@ Simplification:
 - send position back to application and use to render item
 
 ## Prerequisite Dependencies
-- C++ toolchain
+- Standard C++ toolchain
 - cmake
 - CUDA https://developer.nvidia.com/cuda/toolkit
 - cuDNN https://developer.nvidia.com/cudnn
+- OpenGL
+- GTK 2
+    - gtkglext-1.0 (apt install libgtkglext1-dev)
+    - appmenu-gtk2-module 
+    - appmenu-gtk3-module 
+    - libcanberra-gtk-module 
 
 # To Build
 

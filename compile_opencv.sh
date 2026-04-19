@@ -21,7 +21,10 @@ cmake -S ./ -B ./build \
     -D WITH_OPENCL=ON \
     -D WITH_OPENGL=ON \
     -D WITH_GSTREAMER=ON \
-    -D WITH_TBB=ON
+    -D WITH_TBB=ON \
+    -D WITH_QT=OFF \
+    -D WITH_GTK=ON \
+    -D WITH_GTK_2_X=ON
 
 echo "=============Building OpenCV... ============="
 
