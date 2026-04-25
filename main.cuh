@@ -26,6 +26,6 @@ void executeGpuTestKernel();
 void openVRTest();
 
 void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight);
+    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation);
 bool verifySavedCalibration(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight);
+    Mat* newKLeft, Mat* newKRight,  Mat* stereoCamTranslation, Mat* stereoCamRotation);

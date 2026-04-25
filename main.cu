@@ -9,6 +9,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/core/cuda.hpp>
+#include <opencv2/objdetect/aruco_detector.hpp>
 #include <opencv2/cudacodec.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include "Cuda_Func.cuh"
@@ -213,7 +214,7 @@ Mat copy2dVectorToMat(const std::vector<std::vector<double>>& vect)
 
 
 void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight, std::vector<cv::Mat>* calibrationImages)
+    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation, std::vector<cv::Mat>* calibrationImages)
 {
     json j;
     //convert OpenCV matrices to 2D arrays which work nicely with json library
@@ -226,12 +227,17 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
     auto newKLeftArray = copyMatTo2dVector(newKLeft);
     auto newKRightArray = copyMatTo2dVector(newKRight);
 
+    auto stereoCamTranslationArray = copyMatTo2dVector(stereoCamTranslation);
+    auto stereoCamRotationArray = copyMatTo2dVector(stereoCamRotation);
+
     j["kLeft"] = kLeftArray;
     j["dLeft"] = dLeftArray;
     j["kRight"] = kRightArray;
     j["dRight"] = dRightArray;
     j["newKLeft"] = newKLeftArray;
     j["newKRight"] = newKRightArray;
+    j["stereoCamTranslation"] = stereoCamTranslationArray;
+    j["stereoCamRotation"] = stereoCamRotationArray;
 
     std::filesystem::create_directories(CALIBRATION_PATH);
     std::ofstream out((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
@@ -245,7 +251,7 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
 
     std::cout << "Wrote to disk, reading back to verify data integrity " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
 
-    if (verifySavedCalibration(kLeft, dLeft, kRight, dRight, newKLeft, newKRight))
+    if (verifySavedCalibration(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, stereoCamTranslation, stereoCamRotation))
     {
         std::cout << "Calibration successfully saved to disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
     }else
@@ -274,12 +280,13 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
 }
 
 bool verifySavedCalibration(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight)
+    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation)
 {
     bool result = true;
     //read back file to make sure save was successful
-    Mat kLeftCheck, dLeftCheck,  kRightCheck, dRightCheck, newKLeftCheck, newKRightCheck;
-    readCameraCalibrationFromFile(&kLeftCheck, &dLeftCheck,  &kRightCheck, &dRightCheck, &newKLeftCheck, &newKRightCheck);
+    Mat kLeftCheck, dLeftCheck,  kRightCheck, dRightCheck, newKLeftCheck, newKRightCheck, stereoCamTranslationCheck, stereoCamRotationCheck;
+    readCameraCalibrationFromFile(&kLeftCheck, &dLeftCheck,  &kRightCheck, &dRightCheck,
+        &newKLeftCheck, &newKRightCheck, &stereoCamTranslationCheck, &stereoCamRotationCheck);
 
     Mat xorResult;
     bitwise_xor(kLeftCheck, *kLeft, xorResult);
@@ -294,13 +301,17 @@ bool verifySavedCalibration(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
     result = result && countNonZero(xorResult) == 0;
     bitwise_xor(newKRightCheck, *newKRight, xorResult);
     result = result && countNonZero(xorResult) == 0;
+    bitwise_xor(stereoCamTranslationCheck, *stereoCamTranslation, xorResult);
+    result = result && countNonZero(xorResult) == 0;
+    bitwise_xor(stereoCamRotationCheck, *stereoCamRotation, xorResult);
+    result = result && countNonZero(xorResult) == 0;
 
     return result;
 }
 
 
 void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight)
+    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation)
 {
     std::ifstream inFile((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
     json jData = json::parse(inFile);
@@ -311,6 +322,9 @@ void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRi
     std::vector<std::vector<double>> dRightArray = jData["dRight"];
     std::vector<std::vector<double>> newKLeftArray = jData["newKLeft"];
     std::vector<std::vector<double>> newKRightArray = jData["newKRight"];
+    std::vector<std::vector<double>> stereoCamTranslationArray = jData["stereoCamTranslation"];
+    std::vector<std::vector<double>> stereoCamRotationArray = jData["stereoCamRotation"];
+
 
     //convert to OpenCV matrix
     *kLeft = copy2dVectorToMat(kLeftArray);
@@ -319,6 +333,8 @@ void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRi
     *dRight = copy2dVectorToMat(dRightArray);
     *newKLeft = copy2dVectorToMat(newKLeftArray);
     *newKRight = copy2dVectorToMat(newKRightArray);
+    *stereoCamTranslation = copy2dVectorToMat(stereoCamTranslationArray);
+    *stereoCamRotation = copy2dVectorToMat(stereoCamRotationArray);
 
     std::cout << "Calibration read from disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
 }
@@ -332,7 +348,8 @@ bool checkForCameraCalibration()
 }
 
 
-void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* newKLeft, Mat* newKRight)
+void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* newKLeft, Mat* newKRight,
+    Mat* stereoCamTranslation, Mat* stereoCamRotation)
 {
     std::vector<cv::Mat> leftCalibrationImages;
     std::vector<cv::Mat> rightCalibrationImages;
@@ -500,20 +517,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     int NumImages = static_cast<int>(objPoints.size());
 
     std::vector<cv::Mat> rvecs, tvecs;
-    Mat stereoCameraRotation;
-    Mat stereoCameraTranslation;
-
-    // double calibration_result = cv::fisheye::calibrate(objPoints, imagePointsLeft, imageSize, K, D, rvecs, tvecs,
-    //     fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
-    //     cv::TermCriteria(
-    //         cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
-    //         30,
-    //         1e-6
-    //     )
-    //     );
 
     double calibration_result = cv::fisheye::stereoCalibrate(objPoints, imagePointsLeft, imagePointsRight,
-        *kLeft, *dLeft, *kRight, *dRight, imageSize, stereoCameraRotation, stereoCameraTranslation, rvecs, tvecs,
+        *kLeft, *dLeft, *kRight, *dRight, imageSize, *stereoCamRotation, *stereoCamTranslation, rvecs, tvecs,
         fisheye::CALIB_RECOMPUTE_EXTRINSIC | fisheye::CALIB_CHECK_COND | fisheye::CALIB_FIX_SKEW,
         cv::TermCriteria(
            cv::TermCriteria::EPS + cv::TermCriteria::MAX_ITER,
@@ -526,6 +532,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     fisheye::estimateNewCameraMatrixForUndistortRectify(*kLeft, *dLeft, imageSize, Matx33d::eye(), *newKLeft, 1.0);
     fisheye::estimateNewCameraMatrixForUndistortRectify(*kRight, *dRight, imageSize, Matx33d::eye(), *newKRight, 1.0);
 
+    //TODO
+    //fisheye::stereoRectify()
+
     //print results
     std::cout << "Calibration result score (less than 1 = good): " << calibration_result << std::endl;
     std::cout << NumImages << " images used for calibration" << std::endl;
@@ -535,8 +544,8 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     std::cout << "K Right = " << *kRight << std::endl;
     std::cout << "D Right = " << *dRight << std::endl << std::endl;
 
-    std::cout << "Stereo camera rotation = " << stereoCameraRotation << std::endl;
-    std::cout << "Stereo camera translation = " << stereoCameraTranslation << std::endl << std::endl;
+    std::cout << "Stereo camera rotation = " << *stereoCamRotation << std::endl;
+    std::cout << "Stereo camera translation = " << *stereoCamTranslation << std::endl << std::endl;
 
     std::cout << "New K left camera intrinsics = " << *newKLeft << std::endl;
     std::cout << "New K right camera intrinsics = " << *newKRight << std::endl;
@@ -553,10 +562,12 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         std::cin >> response;
         if (response == "Y" || response == "y")
         {
-            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, &combinedCalibrationImages);
+            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight,
+                stereoCamTranslation, stereoCamRotation, &combinedCalibrationImages);
         }else
         {
-            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, nullptr);
+            saveCameraCalibrationToFile(kLeft, dLeft, kRight, dRight, newKLeft, newKRight,
+                stereoCamTranslation, stereoCamRotation, nullptr);
         }
 
 
@@ -578,6 +589,9 @@ void openCvCameraTest()
     Mat camCalNewKLeft;
     Mat camCalNewKRight;
 
+    Mat stereoCamTranslation;
+    Mat stereoCamRotation;
+
     bool doCameraCalibration = true;
 
     if (checkForCameraCalibration())
@@ -597,11 +611,11 @@ void openCvCameraTest()
     if (doCameraCalibration)
     {
         calibrateCameras(&camCalKLeft, &camCalDLeft, &camCalKRight, &camCalDRight,
-            &camCalNewKLeft, &camCalNewKRight);
+            &camCalNewKLeft, &camCalNewKRight, &stereoCamTranslation, &stereoCamRotation);
     }else
     {
         readCameraCalibrationFromFile(&camCalKLeft, &camCalDLeft, &camCalKRight, &camCalDRight,
-            &camCalNewKLeft, &camCalNewKRight);
+            &camCalNewKLeft, &camCalNewKRight, &stereoCamTranslation, &stereoCamRotation);
     }
 
 
@@ -648,63 +662,103 @@ void openCvCameraTest()
 
     //upload distortion parameters to GPU
 
+    // set coordinate system for markers
+    float markerLength = 0.024f; //2.4 cm size marker side length
+    std::vector<Point3d> objPoints(4);
+    objPoints[0] = Point3d(-markerLength/2.f,markerLength/2.f,0);
+    objPoints[1] = Point3d(markerLength/2.f,markerLength/2.f,0);
+    objPoints[2] = Point3d(markerLength/2.f,-markerLength/2.f,0);
+    objPoints[3] = Point3d(-markerLength/2.f,-markerLength/2.f,0);
 
     while (waitKey(16) != ESCAPE_KEY)
     {
 
-        //TODO look into using multiple cuda streams and multiple images in pipeline
+
         capture >> image;
-        //send image to gpu
-        openGlTexture.copyFrom(image);
-
-        //give cuda control of the texture
-        gpuErrchk(cudaGraphicsMapResources(1, &cudaImageHandle));
-        cudaArray_t imageArrayHandle;
-        gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageArrayHandle, cudaImageHandle, 0, 0));
-        cudaResourceDesc resourceDesc = cudaResourceDesc();
-        resourceDesc.resType = cudaResourceTypeArray;
-        resourceDesc.res.array.array = imageArrayHandle;
-
-        cudaSurfaceObject_t surface;
-        cudaCreateSurfaceObject(&surface, &resourceDesc);
 
 
-        //launch kernel
-        //1800 blocks with 1024 threads each
+        ////// GPU and CUDA processing
 
-        dim3 threadsPerBlock(32,32);
-        dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                  (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-        GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surface, image.cols, image.rows);
-        gpuErrchk(cudaPeekAtLastError());
-
-        //give control of the texture back to opengl to display
-        gpuErrchk( cudaDestroySurfaceObject(surface));
-        gpuErrchk( cudaGraphicsUnmapResources(1, &cudaImageHandle));
-
-        //wait for cuda to finish processing
-        gpuErrchk( cudaDeviceSynchronize());
-
-        //trigger opengl to display
-        updateWindow("GPU Image");
-        //cudaMemcpy(gpuImage, image.u->data, imageBytes, cudaMemcpyHostToDevice);
-
-        // leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
-        // fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+        // //TODO look into using multiple cuda streams and multiple images in pipeline
+        // //send image to gpu
+        // openGlTexture.copyFrom(image);
         //
-        // rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
-        // fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
+        // //give cuda control of the texture
+        // gpuErrchk(cudaGraphicsMapResources(1, &cudaImageHandle));
+        // cudaArray_t imageArrayHandle;
+        // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageArrayHandle, cudaImageHandle, 0, 0));
+        // cudaResourceDesc resourceDesc = cudaResourceDesc();
+        // resourceDesc.resType = cudaResourceTypeArray;
+        // resourceDesc.res.array.array = imageArrayHandle;
+        //
+        // cudaSurfaceObject_t surface;
+        // cudaCreateSurfaceObject(&surface, &resourceDesc);
+        //
+        //
+        // //launch kernel
+        // dim3 threadsPerBlock(32,32);
+        // dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
+        //           (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
+        //
+        // GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surface, image.cols, image.rows);
+        // gpuErrchk(cudaPeekAtLastError());
+        //
+        // //give control of the texture back to opengl to display
+        // gpuErrchk( cudaDestroySurfaceObject(surface));
+        // gpuErrchk( cudaGraphicsUnmapResources(1, &cudaImageHandle));
+        //
+        // //wait for cuda to finish processing
+        // gpuErrchk( cudaDeviceSynchronize());
+        //
+        // //trigger opengl to display
+        // updateWindow("GPU Image");
 
-        //copy image back to host
-        //cudaMemcpy(image.u->data, gpuImage, imageBytes, cudaMemcpyDeviceToHost);
 
-        //cudaDeviceSynchronize();
+        //////////// CPU only image processing
 
-        //imshow("GPU Image", ogl::Texture2D(gMat));
 
-        // imshow("Corrected Left Image", correctedLeftImage);
-        // imshow("Corrected Right Image", correctedRightImage);
+        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+        fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+
+        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
+        fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
+
+        //find markers
+        std::vector<int> markerIds;
+        std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+        aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+        cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+        cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+        detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
+
+        size_t nMarkers = markerCorners.size();
+        std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
+
+        std::vector<float> empty_vec;
+
+        // Calculate pose for each marker
+        for (size_t i = 0; i < nMarkers; i++) {
+            solvePnP(objPoints, markerCorners.at(i), camCalKLeft,
+                empty_vec, rvecs.at(i), tvecs.at(i));
+        }
+
+        // draw results
+        Mat imageCopy;
+        correctedLeftImage.copyTo(imageCopy);
+        if(!markerIds.empty()) {
+            cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
+
+
+            for(unsigned int i = 0; i < markerIds.size(); i++)
+                cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
+                    tvecs[i], markerLength * 1.5f, 2);
+
+        }
+
+        imshow ("marker detection", imageCopy);
+
+        imshow("Corrected Left Image", correctedLeftImage);
+        imshow("Corrected Right Image", correctedRightImage);
     }
 
     capture.release();
