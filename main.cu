@@ -772,47 +772,45 @@ void openCvCameraTest()
 
         //////////// CPU only image processing
 
-        // //fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
-        // //fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
-        // remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
-        // remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
-        //
-        // //find markers
-        // std::vector<int> markerIds;
-        // std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
-        // aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
-        // cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-        // cv::aruco::ArucoDetector detector(dictionary, detectorParams);
-        // detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
-        //
-        // size_t nMarkers = markerCorners.size();
-        // std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
-        //
-        // std::vector<float> empty_vec;
-        //
-        // // Calculate pose for each marker
-        // for (size_t i = 0; i < nMarkers; i++) {
-        //     solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
-        //         empty_vec, rvecs.at(i), tvecs.at(i));
-        // }
-        //
-        // // draw results
-        // Mat imageCopy;
-        // correctedLeftImage.copyTo(imageCopy);
-        // if(!markerIds.empty()) {
-        //     cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
-        //
-        //
-        //     for(unsigned int i = 0; i < markerIds.size(); i++)
-        //         cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
-        //             tvecs[i], g_markerLength * 1.5f, 2);
-        //
-        // }
-        //
-        // imshow ("marker detection", imageCopy);
-        //
-        // imshow("Corrected Left Image", correctedLeftImage);
-        // imshow("Corrected Right Image", correctedRightImage);
+        remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
+        remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
+
+        //find markers
+        std::vector<int> markerIds;
+        std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+        aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+        cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+        cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+        detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
+
+        size_t nMarkers = markerCorners.size();
+        std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
+
+        std::vector<float> empty_vec;
+
+        // Calculate pose for each marker
+        for (size_t i = 0; i < nMarkers; i++) {
+            solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
+                empty_vec, rvecs.at(i), tvecs.at(i));
+        }
+
+        // draw results
+        Mat imageCopy;
+        correctedLeftImage.copyTo(imageCopy);
+        if(!markerIds.empty()) {
+            cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
+
+
+            for(unsigned int i = 0; i < markerIds.size(); i++)
+                cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
+                    tvecs[i], g_markerLength * 1.5f, 2);
+
+        }
+
+        imshow ("marker detection", imageCopy);
+
+        imshow("Corrected Left Image", correctedLeftImage);
+        imshow("Corrected Right Image", correctedRightImage);
 
         imshow ("Raw image", image);
 

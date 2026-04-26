@@ -60,7 +60,7 @@ bool CameraStreamer::tryGetFrame(cv::Mat* image)
     std::lock_guard<std::mutex> lock(frameMutex);
     if (latestFrame.empty())
     {
-        std::cerr << "Frame not available yet" << std::endl;
+        //std::cerr << "Frame not available yet" << std::endl;
         return false;
     }
 
