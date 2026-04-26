@@ -658,9 +658,21 @@ void openCvCameraTest()
     namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
 
 
-    std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
-    image = cam_streamer.latestFrame.clone();
-    std::lock_guard<std::mutex> unlock(cam_streamer.frameMutex);
+
+    while (image.empty())
+    {
+        {
+            std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
+            if (cam_streamer.latestFrame.empty())
+            {
+                std::cerr << "Frame not available yet" << std::endl;
+            }else
+            {
+                image = cam_streamer.latestFrame.clone();
+            }
+            //lock released once out of scope
+        }
+    }
     //capture >> image;
     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
 
@@ -730,9 +742,18 @@ void openCvCameraTest()
     while (waitKey(1) != ESCAPE_KEY)
     {
 
-        std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
-        image = cam_streamer.latestFrame.clone();
-        std::lock_guard<std::mutex> unlock(cam_streamer.frameMutex);
+        {
+            std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
+            if (cam_streamer.latestFrame.empty())
+            {
+                std::cerr << "Frame not available yet" << std::endl;
+                continue;
+            }else
+            {
+                image = cam_streamer.latestFrame.clone();
+            }
+            //lock released once out of scope
+        }
 
         // if (! capture.read(image))
         // {
