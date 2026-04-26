@@ -8,7 +8,10 @@ add_executable(${PROJECT_NAME} main.cu
         Cuda_Func.cu
         Cuda_Func.cuh
         main.cuh
-        external/nlohmann/json.hpp)
+        external/nlohmann/json.hpp
+        CameraStreamer.cpp
+        CameraStreamer.h
+)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
 
