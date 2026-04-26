@@ -71,6 +71,7 @@ __global__ void GpuKernelRemapImage (cudaSurfaceObject_t inputImage,
         int srcX = round(map1[row*width + col]);
         int srcY = round(map2[row*width + col]);
 
+        //todo set pixels outside range to black
         //clamp srcX and srcY to the image size
         srcX = max(0, min(srcX, width-1));
         srcY = max(0, min(srcY, height-1));

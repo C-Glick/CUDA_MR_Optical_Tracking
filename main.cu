@@ -641,11 +641,18 @@ void openCvCameraTest()
     camStreamer.getFrame(&image);
 
     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
+    rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows)).clone();
+
 
     //upload image to GPU
     int imageBytes = image.step * image.rows;
     int imageWidth = 1920 / 2;
     int imageHeight = 960;
+
+    //compute optimal blocks and threads based on image size
+    dim3 threadsPerBlock(32,32);
+    dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
+           (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
     resizeWindow("GPU Image", imageWidth, imageHeight);
 
@@ -653,26 +660,39 @@ void openCvCameraTest()
     uchar *gpuImage;
     gpuErrchk(cudaMalloc((void**)&gpuImage, imageBytes));
 
-    ogl::Texture2D openGlTextureDistorted;
-    ogl::Texture2D openGlTextureCorrected;
-    openGlTextureDistorted.copyFrom(leftImage);
-    openGlTextureCorrected.copyFrom(leftImage);
+    ogl::Texture2D openGlTextureDistortedLeft;
+    ogl::Texture2D openGlTextureCorrectedLeft;
+    ogl::Texture2D openGlTextureDistortedRight;
+    ogl::Texture2D openGlTextureCorrectedRight;
+    openGlTextureDistortedLeft.copyFrom(leftImage);
+    openGlTextureCorrectedLeft.copyFrom(leftImage);
+    openGlTextureDistortedRight.copyFrom(rightImage);
+    openGlTextureCorrectedRight.copyFrom(rightImage);
+
     //setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTextureDistorted);
-    setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTextureCorrected);
+    setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTextureCorrectedLeft);
 
 
     //setup texture so CUDA and OpenGL can talk to each other
 
     std::vector<cudaGraphicsResource_t> cudaResources;
-    cudaGraphicsResource_t cudaDistortedImageHandle;
-    cudaGraphicsResource_t cudaCorrectedImageHandle;
-    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaDistortedImageHandle, openGlTextureDistorted.texId(),
-        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //TODO cudaGraphicsRegisterFlagsWriteDiscard
-    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaCorrectedImageHandle, openGlTextureCorrected.texId(),
-        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); //TODO cudaGraphicsRegisterFlagsWriteDiscard
+    cudaGraphicsResource_t cudaDistortedLeftImageHandle;
+    cudaGraphicsResource_t cudaCorrectedLeftImageHandle;
+    cudaGraphicsResource_t cudaDistortedRightImageHandle;
+    cudaGraphicsResource_t cudaCorrectedRightImageHandle;
+    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaDistortedLeftImageHandle, openGlTextureDistortedLeft.texId(),
+        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaCorrectedLeftImageHandle, openGlTextureCorrectedLeft.texId(),
+        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaDistortedRightImageHandle, openGlTextureDistortedRight.texId(),
+      GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+    gpuErrchk(cudaGraphicsGLRegisterImage(&cudaCorrectedRightImageHandle, openGlTextureCorrectedRight.texId(),
+        GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore)); 
 
-    cudaResources.push_back(cudaDistortedImageHandle);
-    cudaResources.push_back(cudaCorrectedImageHandle);
+    cudaResources.push_back(cudaDistortedLeftImageHandle);
+    cudaResources.push_back(cudaCorrectedLeftImageHandle);
+    cudaResources.push_back(cudaDistortedRightImageHandle);
+    cudaResources.push_back(cudaCorrectedRightImageHandle);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -700,6 +720,8 @@ void openCvCameraTest()
     gpuErrchk(cudaMemcpy(gpuMapXRight, remapXRight.data, mapSizeBytes, cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(gpuMapYRight, remapYRight.data, mapSizeBytes, cudaMemcpyHostToDevice));
 
+    std::vector<cudaSurfaceObject_t> cudaSurfaces;
+
     while (waitKey(1) != ESCAPE_KEY)
     {
         if (! camStreamer.tryGetFrame(&image))
@@ -708,60 +730,40 @@ void openCvCameraTest()
             continue;
         }
 
-        //user clone to make the image continuous
+        //use clone to make the image continuous
         leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
         rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows)).clone();
 
-         ////////////// GPU and CUDA processing
+        ////////////// GPU and CUDA processing
 
-         //TODO look into using multiple cuda streams and multiple images in pipeline
-         //send image to gpu
-         openGlTextureDistorted.copyFrom(leftImage);
+        //TODO look into using multiple cuda streams and multiple images in pipeline
+        //send image to gpu
+        openGlTextureDistortedLeft.copyFrom(leftImage);
+        openGlTextureDistortedRight.copyFrom(rightImage);
 
+        //give cuda control of the textures
+        cudaSurfaceObject_t distortedLeftSurface = cudaSurfaces.emplace_back(setResourceCudaAccess(cudaDistortedLeftImageHandle));
+        cudaSurfaceObject_t correctedLeftSurface = cudaSurfaces.emplace_back(setResourceCudaAccess(cudaCorrectedLeftImageHandle));
+        cudaSurfaceObject_t distortedRightSurface = cudaSurfaces.emplace_back(setResourceCudaAccess(cudaDistortedRightImageHandle));
+        cudaSurfaceObject_t correctedRightSurface = cudaSurfaces.emplace_back(setResourceCudaAccess(cudaCorrectedRightImageHandle));
 
-         //give cuda control of the texture
-         gpuErrchk(cudaGraphicsMapResources(cudaResources.size(), cudaResources.data()));
-         cudaArray_t imageDistortedArrayHandle;
-         cudaArray_t imageCorrectedArrayHandle;
-         gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageDistortedArrayHandle, cudaDistortedImageHandle, 0, 0));
-         gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageCorrectedArrayHandle, cudaCorrectedImageHandle, 0, 0));
-
-         cudaResourceDesc resourceDescDistorted = cudaResourceDesc();
-         resourceDescDistorted.resType = cudaResourceTypeArray;
-         resourceDescDistorted.res.array.array = imageDistortedArrayHandle;
-
-         cudaResourceDesc resourceDescCorrected = cudaResourceDesc();
-         resourceDescCorrected.resType = cudaResourceTypeArray;
-         resourceDescCorrected.res.array.array = imageCorrectedArrayHandle;
-
-         cudaSurfaceObject_t surfaceDistorted;
-         cudaSurfaceObject_t surfaceCorrected;
-         cudaCreateSurfaceObject(&surfaceDistorted, &resourceDescDistorted);
-         cudaCreateSurfaceObject(&surfaceCorrected, &resourceDescCorrected);
+        //launch kernels
 
 
-         //launch kernel
-         dim3 threadsPerBlock(32,32);
-         dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
-                   (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
+        GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(distortedLeftSurface, imageWidth, imageHeight);
+        gpuErrchk(cudaPeekAtLastError());
+        GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(distortedLeftSurface, correctedLeftSurface,
+         gpuMapXLeft, gpuMapYLeft, imageWidth, imageHeight);
+        gpuErrchk(cudaPeekAtLastError());
 
-         GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, imageWidth, imageHeight);
-         gpuErrchk(cudaPeekAtLastError());
-         GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, surfaceCorrected,
-             gpuMapXLeft, gpuMapYLeft, imageWidth, imageHeight);
-         gpuErrchk(cudaPeekAtLastError());
+        //give control of the texture back to opengl to display
+        unsetResourcesCudaAccess(&cudaSurfaces, &cudaResources);
 
+        //wait for cuda to finish processing
+        gpuErrchk( cudaDeviceSynchronize());
 
-         //give control of the texture back to opengl to display
-         gpuErrchk( cudaDestroySurfaceObject(surfaceDistorted));
-         gpuErrchk( cudaDestroySurfaceObject(surfaceCorrected));
-         gpuErrchk( cudaGraphicsUnmapResources(2, cudaResources.data()));
-
-         //wait for cuda to finish processing
-         gpuErrchk( cudaDeviceSynchronize());
-
-         //trigger opengl to display
-         updateWindow("GPU Image");
+        //trigger opengl to display
+        updateWindow("GPU Image");
 
 
 
@@ -820,6 +822,49 @@ void openCvCameraTest()
     cudaFree(gpuImage);
     destroyAllWindows();
 }
+
+cudaSurfaceObject_t setResourceCudaAccess(cudaGraphicsResource_t resource)
+{
+    gpuErrchk(cudaGraphicsMapResources(1, {&resource}));
+    cudaArray_t arrayHandle;
+    gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&arrayHandle, resource, 0, 0));
+    cudaResourceDesc resourceDesc = cudaResourceDesc();
+    resourceDesc.resType = cudaResourceTypeArray;
+    resourceDesc.res.array.array = arrayHandle;
+    cudaSurfaceObject_t surface;
+    gpuErrchk(cudaCreateSurfaceObject(&surface, &resourceDesc));
+
+    return surface;
+}
+
+void setResourcesCudaAccess(std::vector<cudaGraphicsResource_t>* resources,
+    std::vector<cudaSurfaceObject_t>* surfacesOut)
+{
+    for (cudaGraphicsResource_t resource : *resources)
+    {
+        surfacesOut->emplace_back(setResourceCudaAccess(resource));
+    }
+}
+
+
+void unsetResourceCudaAccess(cudaSurfaceObject_t surface, cudaGraphicsResource_t resource)
+{
+    gpuErrchk( cudaDestroySurfaceObject(surface));
+    gpuErrchk( cudaGraphicsUnmapResources(1, {&resource}));
+}
+
+void unsetResourcesCudaAccess(std::vector<cudaSurfaceObject_t>* surfaces, std::vector<cudaGraphicsResource_t>* resources)
+{
+    int size = surfaces->size();
+    for (int i = 0; i < size; i++)
+    {
+        unsetResourceCudaAccess(surfaces->at(0), resources->at(i));
+        //remove reference to surface in vector after delete
+        surfaces->erase(surfaces->begin());
+    }
+}
+
+
 
 void cpuMarkerDetection(const Mat* image, Mat* camCalKLeft, Mat* camCalDLeft, Mat* camCalKRight, Mat* camCalDRight,
     Mat* camCalNewKLeft, Mat* camCalNewKRight)
