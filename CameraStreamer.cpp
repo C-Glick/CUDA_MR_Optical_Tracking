@@ -11,6 +11,11 @@ CameraStreamer::CameraStreamer(int cameraId)
     capture.set(CAP_PROP_BUFFERSIZE, 1);
     capture.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G'));
     captureThread = std::thread(&CameraStreamer::cameraCaptureThread, this);
+
+    if (!capture.isOpened())
+    {
+        std::cerr << "Failed to open camera" << std::endl;
+    }
 }
 
 void CameraStreamer::cameraCaptureThread()
@@ -31,6 +36,40 @@ void CameraStreamer::cameraCaptureThread()
         }
     }
 }
+
+void CameraStreamer::getFrame(cv::Mat* image)
+{
+    while (image->empty())
+    {
+        {
+            std::lock_guard<std::mutex> lock(frameMutex);
+            if (latestFrame.empty())
+            {
+                std::cerr << "Frame not available yet" << std::endl;
+            }else
+            {
+                *image = latestFrame.clone();
+                break;
+            }
+        } //lock released once out of scope
+    }
+}
+
+bool CameraStreamer::tryGetFrame(cv::Mat* image)
+{
+    std::lock_guard<std::mutex> lock(frameMutex);
+    if (latestFrame.empty())
+    {
+        std::cerr << "Frame not available yet" << std::endl;
+        return false;
+    }
+
+    *image = latestFrame.clone();
+    return true;
+
+    //lock released once out of scope
+}
+
 
 void CameraStreamer::StopStream()
 {

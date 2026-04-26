@@ -22,6 +22,18 @@ public:
     void StopStream();
     ~CameraStreamer();
 
+    /**
+     * Thread safe Blocking call that will get the next nonempty frame
+     * @param image
+     */
+    void getFrame(cv::Mat* image);
+
+    /**
+      * Thread safe NON Blocking call that will attempt to get the latest frame
+      * @param image
+      */
+    bool tryGetFrame(cv::Mat* image);
+
 private:
     cv::VideoCapture capture;
     void cameraCaptureThread();

@@ -628,25 +628,12 @@ void openCvCameraTest()
     }
 
 
-
-
-    CameraStreamer cam_streamer = CameraStreamer(0);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-    // VideoCapture capture(0);
-    // capture.set(CAP_PROP_FRAME_WIDTH, 1920);
-    // capture.set(CAP_PROP_FRAME_HEIGHT, 960);
-    // capture.set(CAP_PROP_BUFFERSIZE, 10);
-
-
+    CameraStreamer camStreamer = CameraStreamer(0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // wait for stream to start
 
 
     Mat image;
     Mat leftImage, rightImage;
-    // if (capture.isOpened() == false)
-    // {
-    //     std::cerr << "ERROR: Could not open camera." << std::endl;
-    // }
 
     //use calibration results to undistort live camera feed
     Mat correctedLeftImage;
@@ -657,23 +644,8 @@ void openCvCameraTest()
 
     namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
 
+    camStreamer.getFrame(&image);
 
-
-    while (image.empty())
-    {
-        {
-            std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
-            if (cam_streamer.latestFrame.empty())
-            {
-                std::cerr << "Frame not available yet" << std::endl;
-            }else
-            {
-                image = cam_streamer.latestFrame.clone();
-            }
-            //lock released once out of scope
-        }
-    }
-    //capture >> image;
     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
 
     //upload image to GPU
@@ -708,8 +680,6 @@ void openCvCameraTest()
     cudaResources.push_back(cudaDistortedImageHandle);
     cudaResources.push_back(cudaCorrectedImageHandle);
 
-
-
     gpuErrchk(cudaPeekAtLastError());
 
 
@@ -717,7 +687,6 @@ void openCvCameraTest()
     Mat mapX, mapY;
     fisheye::initUndistortRectifyMap(camCalKLeft, camCalDLeft, cv::Matx33d::eye(),
         camCalNewKLeft, Size(960,960), CV_32FC1, mapX, mapY);
-
 
 
     //upload distortion parameters to GPU
@@ -736,150 +705,121 @@ void openCvCameraTest()
     cudaMemcpy(gpuMapY, mapY.data, mapSizeBytes, cudaMemcpyHostToDevice);
 
 
-    std::vector<int> frameReadyIndex;
-    const int64 timeoutNs = 1000;
-
     while (waitKey(1) != ESCAPE_KEY)
     {
 
+        if (! camStreamer.tryGetFrame(&image))
         {
-            std::lock_guard<std::mutex> lock(cam_streamer.frameMutex);
-            if (cam_streamer.latestFrame.empty())
-            {
-                std::cerr << "Frame not available yet" << std::endl;
-                continue;
-            }else
-            {
-                image = cam_streamer.latestFrame.clone();
-            }
-            //lock released once out of scope
+            //image not ready
+            continue;
         }
 
-        // if (! capture.read(image))
-        // {
-        //     std::cerr << "capture failed" << std::endl;
-        //     continue;
-        // }
-        // if (image.empty())
-        // {
-        //     std::cerr << "Image is empty" << std::endl;
-        //     continue;
-        // }
 
         leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
 
 
-        //test busy loop
-        double temp1=1.0123;
-        double temp2=5.6786743;
-        double temp3 = 3.4847234;
-        for (int i=0; i< 10000000; i++)
-        {
-            temp3 = temp1 * temp2 * temp3;
-        }
+         ////////////// GPU and CUDA processing
 
-        ////// GPU and CUDA processing
-        //
-        // //TODO look into using multiple cuda streams and multiple images in pipeline
-        // //send image to gpu
-        // openGlTextureDistorted.copyFrom(leftImage);
-        //
-        //
-        // //give cuda control of the texture
-        // gpuErrchk(cudaGraphicsMapResources(cudaResources.size(), cudaResources.data()));
-        // cudaArray_t imageDistortedArrayHandle;
-        // cudaArray_t imageCorrectedArrayHandle;
-        // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageDistortedArrayHandle, cudaDistortedImageHandle, 0, 0));
-        // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageCorrectedArrayHandle, cudaCorrectedImageHandle, 0, 0));
-        //
-        // cudaResourceDesc resourceDescDistorted = cudaResourceDesc();
-        // resourceDescDistorted.resType = cudaResourceTypeArray;
-        // resourceDescDistorted.res.array.array = imageDistortedArrayHandle;
-        //
-        // cudaResourceDesc resourceDescCorrected = cudaResourceDesc();
-        // resourceDescCorrected.resType = cudaResourceTypeArray;
-        // resourceDescCorrected.res.array.array = imageCorrectedArrayHandle;
-        //
-        // cudaSurfaceObject_t surfaceDistorted;
-        // cudaSurfaceObject_t surfaceCorrected;
-        // cudaCreateSurfaceObject(&surfaceDistorted, &resourceDescDistorted);
-        // cudaCreateSurfaceObject(&surfaceCorrected, &resourceDescCorrected);
-        //
-        //
-        // //launch kernel
-        // dim3 threadsPerBlock(32,32);
-        // dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
-        //           (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
-        //
-        // GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, imageWidth, imageHeight);
-        // gpuErrchk(cudaPeekAtLastError());
-        // GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, surfaceCorrected,
-        //     gpuMapX, gpuMapY, imageWidth, imageHeight);
-        // gpuErrchk(cudaPeekAtLastError());
-        //
-        //
-        // //give control of the texture back to opengl to display
-        // gpuErrchk( cudaDestroySurfaceObject(surfaceDistorted));
-        // gpuErrchk( cudaDestroySurfaceObject(surfaceCorrected));
-        // gpuErrchk( cudaGraphicsUnmapResources(2, cudaResources.data()));
-        //
-        // //wait for cuda to finish processing
-        // gpuErrchk( cudaDeviceSynchronize());
-        //
-        // //trigger opengl to display
-        // updateWindow("GPU Image");
-
+         // //TODO look into using multiple cuda streams and multiple images in pipeline
+         // //send image to gpu
+         // openGlTextureDistorted.copyFrom(leftImage);
+         //
+         //
+         // //give cuda control of the texture
+         // gpuErrchk(cudaGraphicsMapResources(cudaResources.size(), cudaResources.data()));
+         // cudaArray_t imageDistortedArrayHandle;
+         // cudaArray_t imageCorrectedArrayHandle;
+         // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageDistortedArrayHandle, cudaDistortedImageHandle, 0, 0));
+         // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageCorrectedArrayHandle, cudaCorrectedImageHandle, 0, 0));
+         //
+         // cudaResourceDesc resourceDescDistorted = cudaResourceDesc();
+         // resourceDescDistorted.resType = cudaResourceTypeArray;
+         // resourceDescDistorted.res.array.array = imageDistortedArrayHandle;
+         //
+         // cudaResourceDesc resourceDescCorrected = cudaResourceDesc();
+         // resourceDescCorrected.resType = cudaResourceTypeArray;
+         // resourceDescCorrected.res.array.array = imageCorrectedArrayHandle;
+         //
+         // cudaSurfaceObject_t surfaceDistorted;
+         // cudaSurfaceObject_t surfaceCorrected;
+         // cudaCreateSurfaceObject(&surfaceDistorted, &resourceDescDistorted);
+         // cudaCreateSurfaceObject(&surfaceCorrected, &resourceDescCorrected);
+         //
+         //
+         // //launch kernel
+         // dim3 threadsPerBlock(32,32);
+         // dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
+         //           (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
+         //
+         // GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, imageWidth, imageHeight);
+         // gpuErrchk(cudaPeekAtLastError());
+         // GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, surfaceCorrected,
+         //     gpuMapX, gpuMapY, imageWidth, imageHeight);
+         // gpuErrchk(cudaPeekAtLastError());
+         //
+         //
+         // //give control of the texture back to opengl to display
+         // gpuErrchk( cudaDestroySurfaceObject(surfaceDistorted));
+         // gpuErrchk( cudaDestroySurfaceObject(surfaceCorrected));
+         // gpuErrchk( cudaGraphicsUnmapResources(2, cudaResources.data()));
+         //
+         // //wait for cuda to finish processing
+         // gpuErrchk( cudaDeviceSynchronize());
+         //
+         // //trigger opengl to display
+         // updateWindow("GPU Image");
+         //
 
 
         //////////// CPU only image processing
 
 
-        //
-        // leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
-        // //fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
-        // remap(leftImage, correctedLeftImage, mapX, mapY, INTER_LINEAR, BORDER_CONSTANT);
-        //
-        // rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
-        // //fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
-        // remap(rightImage, correctedRightImage, mapX, mapY, INTER_LINEAR, BORDER_CONSTANT);
-        //
-        //
-        // //find markers
-        // std::vector<int> markerIds;
-        // std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
-        // aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
-        // cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-        // cv::aruco::ArucoDetector detector(dictionary, detectorParams);
-        // detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
-        //
-        // size_t nMarkers = markerCorners.size();
-        // std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
-        //
-        // std::vector<float> empty_vec;
-        //
-        // // Calculate pose for each marker
-        // for (size_t i = 0; i < nMarkers; i++) {
-        //     solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
-        //         empty_vec, rvecs.at(i), tvecs.at(i));
-        // }
-        //
-        // // draw results
-        // Mat imageCopy;
-        // correctedLeftImage.copyTo(imageCopy);
-        // if(!markerIds.empty()) {
-        //     cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
-        //
-        //
-        //     for(unsigned int i = 0; i < markerIds.size(); i++)
-        //         cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
-        //             tvecs[i], g_markerLength * 1.5f, 2);
-        //
-        // }
-        //
-        // imshow ("marker detection", imageCopy);
-        //
-        // imshow("Corrected Left Image", correctedLeftImage);
-        // imshow("Corrected Right Image", correctedRightImage);
+
+        leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
+        //fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+        remap(leftImage, correctedLeftImage, mapX, mapY, INTER_LINEAR, BORDER_CONSTANT);
+
+        rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
+        //fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
+        remap(rightImage, correctedRightImage, mapX, mapY, INTER_LINEAR, BORDER_CONSTANT);
+
+
+        //find markers
+        std::vector<int> markerIds;
+        std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+        aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+        cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+        cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+        detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
+
+        size_t nMarkers = markerCorners.size();
+        std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
+
+        std::vector<float> empty_vec;
+
+        // Calculate pose for each marker
+        for (size_t i = 0; i < nMarkers; i++) {
+            solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
+                empty_vec, rvecs.at(i), tvecs.at(i));
+        }
+
+        // draw results
+        Mat imageCopy;
+        correctedLeftImage.copyTo(imageCopy);
+        if(!markerIds.empty()) {
+            cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
+
+
+            for(unsigned int i = 0; i < markerIds.size(); i++)
+                cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
+                    tvecs[i], g_markerLength * 1.5f, 2);
+
+        }
+
+        imshow ("marker detection", imageCopy);
+
+        imshow("Corrected Left Image", correctedLeftImage);
+        imshow("Corrected Right Image", correctedRightImage);
 
         imshow ("Raw image", image);
 
@@ -889,9 +829,7 @@ void openCvCameraTest()
 
     }
 
-    //capture.release();
     cudaFree(gpuImage);
-
     destroyAllWindows();
 }
 
