@@ -400,31 +400,24 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
 
         //start up headset camera and capture calibration images
         //TODO allow the index to change so we can select the correct camera(s)
-        VideoCapture capture(0);
+        CameraStreamer camStreamer = CameraStreamer(0);
         Mat image;
         Mat leftImage, rightImage;
 
 
-        // cuda::GpuMat device_image;
-        // Ptr<cudacodec::VideoReader> device_capture = cudacodec::
-        if (capture.isOpened() == false)
-        {
-            std::cerr << "ERROR: Could not open camera." << std::endl;
-        }
+
         namedWindow("Display Camera Image", WINDOW_NORMAL);
         resizeWindow("Display Camera Image", 1920, 960);
         while (true)
         {
-            capture >> image;
+            if (!camStreamer.tryGetFrame(&image))
+            {
+                // camera not ready yet
+                continue;
+            }
             //break image in half for left and right eye
             leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
             rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
-
-            if (image.empty())
-            {
-                std::cerr << "ERROR: blank frame" << std::endl;
-                continue;
-            }
 
             imshow("Display Camera Image", image);
 
@@ -444,7 +437,6 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
                 std::cout << "Captured calibration frame #" << std::to_string(combinedCalibrationImages.size() - 1) << std::endl;
             }
         }
-        capture.release();
     }
 
     //process calibration images
@@ -720,55 +712,55 @@ void openCvCameraTest()
 
          ////////////// GPU and CUDA processing
 
-         // //TODO look into using multiple cuda streams and multiple images in pipeline
-         // //send image to gpu
-         // openGlTextureDistorted.copyFrom(leftImage);
-         //
-         //
-         // //give cuda control of the texture
-         // gpuErrchk(cudaGraphicsMapResources(cudaResources.size(), cudaResources.data()));
-         // cudaArray_t imageDistortedArrayHandle;
-         // cudaArray_t imageCorrectedArrayHandle;
-         // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageDistortedArrayHandle, cudaDistortedImageHandle, 0, 0));
-         // gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageCorrectedArrayHandle, cudaCorrectedImageHandle, 0, 0));
-         //
-         // cudaResourceDesc resourceDescDistorted = cudaResourceDesc();
-         // resourceDescDistorted.resType = cudaResourceTypeArray;
-         // resourceDescDistorted.res.array.array = imageDistortedArrayHandle;
-         //
-         // cudaResourceDesc resourceDescCorrected = cudaResourceDesc();
-         // resourceDescCorrected.resType = cudaResourceTypeArray;
-         // resourceDescCorrected.res.array.array = imageCorrectedArrayHandle;
-         //
-         // cudaSurfaceObject_t surfaceDistorted;
-         // cudaSurfaceObject_t surfaceCorrected;
-         // cudaCreateSurfaceObject(&surfaceDistorted, &resourceDescDistorted);
-         // cudaCreateSurfaceObject(&surfaceCorrected, &resourceDescCorrected);
-         //
-         //
-         // //launch kernel
-         // dim3 threadsPerBlock(32,32);
-         // dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
-         //           (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
-         //
-         // GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, imageWidth, imageHeight);
-         // gpuErrchk(cudaPeekAtLastError());
-         // GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, surfaceCorrected,
-         //     gpuMapX, gpuMapY, imageWidth, imageHeight);
-         // gpuErrchk(cudaPeekAtLastError());
-         //
-         //
-         // //give control of the texture back to opengl to display
-         // gpuErrchk( cudaDestroySurfaceObject(surfaceDistorted));
-         // gpuErrchk( cudaDestroySurfaceObject(surfaceCorrected));
-         // gpuErrchk( cudaGraphicsUnmapResources(2, cudaResources.data()));
-         //
-         // //wait for cuda to finish processing
-         // gpuErrchk( cudaDeviceSynchronize());
-         //
-         // //trigger opengl to display
-         // updateWindow("GPU Image");
-         //
+         //TODO look into using multiple cuda streams and multiple images in pipeline
+         //send image to gpu
+         openGlTextureDistorted.copyFrom(leftImage);
+
+
+         //give cuda control of the texture
+         gpuErrchk(cudaGraphicsMapResources(cudaResources.size(), cudaResources.data()));
+         cudaArray_t imageDistortedArrayHandle;
+         cudaArray_t imageCorrectedArrayHandle;
+         gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageDistortedArrayHandle, cudaDistortedImageHandle, 0, 0));
+         gpuErrchk(cudaGraphicsSubResourceGetMappedArray(&imageCorrectedArrayHandle, cudaCorrectedImageHandle, 0, 0));
+
+         cudaResourceDesc resourceDescDistorted = cudaResourceDesc();
+         resourceDescDistorted.resType = cudaResourceTypeArray;
+         resourceDescDistorted.res.array.array = imageDistortedArrayHandle;
+
+         cudaResourceDesc resourceDescCorrected = cudaResourceDesc();
+         resourceDescCorrected.resType = cudaResourceTypeArray;
+         resourceDescCorrected.res.array.array = imageCorrectedArrayHandle;
+
+         cudaSurfaceObject_t surfaceDistorted;
+         cudaSurfaceObject_t surfaceCorrected;
+         cudaCreateSurfaceObject(&surfaceDistorted, &resourceDescDistorted);
+         cudaCreateSurfaceObject(&surfaceCorrected, &resourceDescCorrected);
+
+
+         //launch kernel
+         dim3 threadsPerBlock(32,32);
+         dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                   (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+         GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, imageWidth, imageHeight);
+         gpuErrchk(cudaPeekAtLastError());
+         GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(surfaceDistorted, surfaceCorrected,
+             gpuMapX, gpuMapY, imageWidth, imageHeight);
+         gpuErrchk(cudaPeekAtLastError());
+
+
+         //give control of the texture back to opengl to display
+         gpuErrchk( cudaDestroySurfaceObject(surfaceDistorted));
+         gpuErrchk( cudaDestroySurfaceObject(surfaceCorrected));
+         gpuErrchk( cudaGraphicsUnmapResources(2, cudaResources.data()));
+
+         //wait for cuda to finish processing
+         gpuErrchk( cudaDeviceSynchronize());
+
+         //trigger opengl to display
+         updateWindow("GPU Image");
+
 
 
         //////////// CPU only image processing
