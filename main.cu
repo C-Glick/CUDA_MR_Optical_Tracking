@@ -167,14 +167,21 @@ void openVRTest()
 }
 
 void onOpenGlDraw(void* param) {
-    cv::ogl::Texture2D* tex = (cv::ogl::Texture2D*)param;
+    //param is a pointer to an array of texture2D pointers
+    ogl::Texture2D* (*images)[] = (ogl::Texture2D* (*)[])param;
+    ogl::Texture2D leftImage =  *(*images)[0];
+    ogl::Texture2D rightImage = *(*images)[1];
+
     // Enable texturing and bind the texture object
     //glEnable(GL_TEXTURE_2D);
-    tex->bind();
+    leftImage.bind();
+    rightImage.bind();
 
     // Use OpenCV's helper to render the texture to the current window
     // This draws a screen-aligned quad by default
-    cv::ogl::render(*tex);
+    cv::ogl::render(leftImage, Rect_<double>(0,0,0.5, 1));
+    cv::ogl::render(rightImage, Rect_<double>(0.5,0,0.5, 1));
+
 }
 
 void openCvImageTest(const std::string& imgPath)
@@ -633,8 +640,6 @@ void openCvCameraTest()
     Mat correctedLeftImage;
     Mat correctedRightImage;
 
-    // namedWindow("Corrected Left Image");
-    // namedWindow("Corrected Right Image");
 
     namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
 
@@ -654,7 +659,7 @@ void openCvCameraTest()
     dim3 numBlocks((imageWidth + threadsPerBlock.x - 1) / threadsPerBlock.x,
            (imageHeight + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-    resizeWindow("GPU Image", imageWidth, imageHeight);
+    resizeWindow("GPU Image", imageWidth*2, imageHeight);
 
     //allocate memory on gpu
     uchar *gpuImage;
@@ -669,12 +674,11 @@ void openCvCameraTest()
     openGlTextureDistortedRight.copyFrom(rightImage);
     openGlTextureCorrectedRight.copyFrom(rightImage);
 
-    //setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTextureDistorted);
-    setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &openGlTextureCorrectedLeft);
+    ogl::Texture2D* correctedImages[] = {&openGlTextureCorrectedLeft, &openGlTextureCorrectedRight};
 
+    setOpenGlDrawCallback("GPU Image", onOpenGlDraw, &correctedImages);
 
     //setup texture so CUDA and OpenGL can talk to each other
-
     std::vector<cudaGraphicsResource_t> cudaResources;
     cudaGraphicsResource_t cudaDistortedLeftImageHandle;
     cudaGraphicsResource_t cudaCorrectedLeftImageHandle;
@@ -748,12 +752,11 @@ void openCvCameraTest()
         cudaSurfaceObject_t correctedRightSurface = cudaSurfaces.emplace_back(setResourceCudaAccess(cudaCorrectedRightImageHandle));
 
         //launch kernels
-
-
-        GpuKernelColorChange<<<numBlocks, threadsPerBlock>>>(distortedLeftSurface, imageWidth, imageHeight);
-        gpuErrchk(cudaPeekAtLastError());
         GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(distortedLeftSurface, correctedLeftSurface,
          gpuMapXLeft, gpuMapYLeft, imageWidth, imageHeight);
+        gpuErrchk(cudaPeekAtLastError());
+        GpuKernelRemapImage<<<numBlocks, threadsPerBlock>>>(distortedRightSurface, correctedRightSurface,
+         gpuMapXRight, gpuMapYRight, imageWidth, imageHeight);
         gpuErrchk(cudaPeekAtLastError());
 
         //give control of the texture back to opengl to display
@@ -769,47 +772,47 @@ void openCvCameraTest()
 
         //////////// CPU only image processing
 
-        //fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
-        //fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
-        remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
-        remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
-
-        //find markers
-        std::vector<int> markerIds;
-        std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
-        aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
-        cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-        cv::aruco::ArucoDetector detector(dictionary, detectorParams);
-        detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
-
-        size_t nMarkers = markerCorners.size();
-        std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
-
-        std::vector<float> empty_vec;
-
-        // Calculate pose for each marker
-        for (size_t i = 0; i < nMarkers; i++) {
-            solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
-                empty_vec, rvecs.at(i), tvecs.at(i));
-        }
-
-        // draw results
-        Mat imageCopy;
-        correctedLeftImage.copyTo(imageCopy);
-        if(!markerIds.empty()) {
-            cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
-
-
-            for(unsigned int i = 0; i < markerIds.size(); i++)
-                cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
-                    tvecs[i], g_markerLength * 1.5f, 2);
-
-        }
-
-        imshow ("marker detection", imageCopy);
-
-        imshow("Corrected Left Image", correctedLeftImage);
-        imshow("Corrected Right Image", correctedRightImage);
+        // //fisheye::undistortImage(leftImage, correctedLeftImage, camCalKLeft, camCalDLeft, camCalNewKLeft);
+        // //fisheye::undistortImage(rightImage, correctedRightImage, camCalKRight, camCalDRight, camCalNewKRight);
+        // remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
+        // remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
+        //
+        // //find markers
+        // std::vector<int> markerIds;
+        // std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+        // aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+        // cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+        // cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+        // detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
+        //
+        // size_t nMarkers = markerCorners.size();
+        // std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
+        //
+        // std::vector<float> empty_vec;
+        //
+        // // Calculate pose for each marker
+        // for (size_t i = 0; i < nMarkers; i++) {
+        //     solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
+        //         empty_vec, rvecs.at(i), tvecs.at(i));
+        // }
+        //
+        // // draw results
+        // Mat imageCopy;
+        // correctedLeftImage.copyTo(imageCopy);
+        // if(!markerIds.empty()) {
+        //     cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
+        //
+        //
+        //     for(unsigned int i = 0; i < markerIds.size(); i++)
+        //         cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
+        //             tvecs[i], g_markerLength * 1.5f, 2);
+        //
+        // }
+        //
+        // imshow ("marker detection", imageCopy);
+        //
+        // imshow("Corrected Left Image", correctedLeftImage);
+        // imshow("Corrected Right Image", correctedRightImage);
 
         imshow ("Raw image", image);
 
