@@ -11,6 +11,8 @@ add_executable(${PROJECT_NAME} main.cu
         external/nlohmann/json.hpp
         CameraStreamer.cpp
         CameraStreamer.h
+        GpuArucoDetector.cpp
+        GpuArucoDetector.h
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
