@@ -286,6 +286,8 @@ static void _detectInitialCandidates(const Mat &grey, vector<vector<Point2f> > &
                                      vector<vector<Point> > &contours,
                                      const DetectorParameters &params) {
 
+    //todo Glick implement adaptive threshold in GPU
+
     CV_Assert(params.adaptiveThreshWinSizeMin >= 3 && params.adaptiveThreshWinSizeMax >= 3);
     CV_Assert(params.adaptiveThreshWinSizeMax >= params.adaptiveThreshWinSizeMin);
     CV_Assert(params.adaptiveThreshWinSizeStep > 0);
@@ -794,6 +796,9 @@ struct GpuArucoDetector::ArucoDetectorImpl {
         vector<vector<Point> > contours;
         vector<int> ids;
         vector<float> markersConfidence;
+
+
+        //todo Glick do not use april tag for testing to simplify
 
         /// STEP 2.a Detect marker candidates :: using AprilTag
         if(detectorParams.cornerRefinementMethod == (int)CORNER_REFINE_APRILTAG){
