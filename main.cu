@@ -42,12 +42,33 @@ float g_markerLength = 0.024f; //meters, 2.4 cm size marker side length
 std::vector<Point3d> g_MarkerObjPoints(4);
 
 vr::IVRSystem* g_openVRSystem = nullptr;
+std::shared_ptr<CommandLineParser> g_parser;
+bool g_debug = false;
 
 using namespace cv;
 int main(const int argc, char** argv)
 {
+    const String commandLineKeys =
+      "{help h usage ? |      | Print this message   }"
+      "{debug          |false | Display debug views and print debug messages }"
+      "{sampleVideo   |<none>| Sample video to display usage on systems that do not have the same VR hardware }"
+      "{cameraID      | 0 | The camera index to use }"
+      ;
+
+    g_parser = std::make_shared<CommandLineParser>(argc, argv, commandLineKeys);
+    if (g_parser->has("help"))
+    {
+        g_parser->printMessage();
+        return 0;
+    }
+
+    g_debug =  g_parser->get<bool>("debug");
+
+
     int cudaDevices = cuda::getCudaEnabledDeviceCount();
-    std::cout << cv::getBuildInformation() << std::endl;
+    if (g_debug)
+        std::cout << cv::getBuildInformation() << std::endl;
+
 
     std::cout << "Number of cuda devices: " << cudaDevices << std::endl;
 
@@ -419,7 +440,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
 
         //start up headset camera and capture calibration images
         //TODO allow the index to change so we can select the correct camera(s)
-        CameraStreamer camStreamer = CameraStreamer(0);
+        CameraStreamer camStreamer = CameraStreamer(g_parser->get<int>("cameraID"));
         Mat image;
         Mat leftImage, rightImage;
 
@@ -509,14 +530,16 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
             //allocate corresponding world space points
             objPoints.push_back(objp);
 
-            //todo debug enable to show images
-            drawChessboardCorners(leftGrey, CHECKERBOARD, cornersLeft, cornersResultLeft);
-            drawChessboardCorners(rightGrey, CHECKERBOARD, cornersRight, cornersResultRight);
+            if (g_debug)
+            {
+                drawChessboardCorners(leftGrey, CHECKERBOARD, cornersLeft, cornersResultLeft);
+                drawChessboardCorners(rightGrey, CHECKERBOARD, cornersRight, cornersResultRight);
 
-            imshow("Left image", leftGrey);
-            imshow("Right image", rightGrey);
+                imshow("Left image", leftGrey);
+                imshow("Right image", rightGrey);
 
-            waitKey(50000);
+                waitKey(50000);
+            }
         }
     }
 
@@ -636,7 +659,15 @@ void openCvCameraRoutine()
     fisheye::initUndistortRectifyMap(camCalKRight, camCalDRight, cv::Matx33d::eye(),
       camCalNewKRight, imageSize, CV_32FC1, remapXRight, remapYRight);
 
-    CameraStreamer camStreamer = CameraStreamer(0);
+    std::shared_ptr<CameraStreamer> camStreamer;
+    if (g_parser->has("sampleVideo"))
+    {
+        String filepath = g_parser->get<String>("sampleVideo");
+        camStreamer = std::make_shared<CameraStreamer>(filepath);
+    }else
+    {
+        camStreamer = std::make_shared<CameraStreamer>(g_parser->get<int>("cameraID"));
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // wait for stream to start
 
     Mat image, leftImage, rightImage;
@@ -650,7 +681,7 @@ void openCvCameraRoutine()
 
     namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
 
-    camStreamer.getFrame(&image);
+    camStreamer->getFrame(&image);
 
     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
     rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows)).clone();
@@ -734,7 +765,7 @@ void openCvCameraRoutine()
 
     while (waitKey(1) != ESCAPE_KEY)
     {
-        if (! camStreamer.tryGetFrame(&image))
+        if (! camStreamer->tryGetFrame(&image))
         {
             //image not ready
             continue;
@@ -842,6 +873,11 @@ void openCvCameraRoutine()
 
         imshow ("marker detection left", imageCopyLeft);
         imshow ("marker detection right", imageCopyRight);
+
+        if (g_debug)
+        {
+            imshow("Raw image", image);
+        }
 
         // =============== End image processing ==================
 

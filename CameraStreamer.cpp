@@ -5,16 +5,33 @@
 #include "CameraStreamer.h"
 using namespace cv;
 
+CameraStreamer::CameraStreamer(){}
+
+
 CameraStreamer::CameraStreamer(int cameraId)
 {
     capture = cv::VideoCapture(cameraId);
     capture.set(CAP_PROP_BUFFERSIZE, 1);
     capture.set(CAP_PROP_FOURCC, VideoWriter::fourcc('M', 'J', 'P', 'G'));
     captureThread = std::thread(&CameraStreamer::cameraCaptureThread, this);
+    isVideoFile = false;
 
     if (!capture.isOpened())
     {
         std::cerr << "Failed to open camera" << std::endl;
+    }
+}
+
+CameraStreamer::CameraStreamer(String filename)
+{
+    capture = cv::VideoCapture(filename);
+    capture.set(CAP_PROP_BUFFERSIZE, 1);
+    captureThread = std::thread(&CameraStreamer::cameraCaptureThread, this);
+    isVideoFile = true;
+
+    if (!capture.isOpened())
+    {
+        std::cerr << "Failed to open video" << std::endl;
     }
 }
 
@@ -29,6 +46,12 @@ void CameraStreamer::cameraCaptureThread()
             {
                 std::lock_guard<std::mutex> lock(frameMutex);
                 latestFrame = temp_frame.clone();
+            }
+
+            // limit video playback to 60fps
+            if (isVideoFile)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(16));
             }
         }else
         {

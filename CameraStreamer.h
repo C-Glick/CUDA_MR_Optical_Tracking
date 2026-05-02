@@ -17,7 +17,10 @@ public:
     std::atomic<bool> isRunning;
     std::thread captureThread;
 
+    CameraStreamer();
     CameraStreamer(int cameraID);
+    CameraStreamer(cv::String filename);
+
 
     void StopStream();
     ~CameraStreamer();
@@ -37,6 +40,7 @@ public:
 private:
     cv::VideoCapture capture;
     void cameraCaptureThread();
+    bool isVideoFile;
 
 };
 
