@@ -33,9 +33,15 @@ using json = nlohmann::json;
 #define CALIBRATION_FILE "calibration_params.json"
 #define CALIBRATION_IMAGE_FILE "calibration_image_" //calibration_image_001.png
 
+#define CAMERA_WIDTH 960
+#define CAMERA_HEIGHT 960
+#define CAMERA_DOUBLE_WIDTH 1920
+
 const cv::Size CHECKERBOARD(9, 6); // calibration pattern checkerboard size
-float g_markerLength = 0.024f; //2.4 cm size marker side length
+float g_markerLength = 0.024f; //meters, 2.4 cm size marker side length
 std::vector<Point3d> g_MarkerObjPoints(4);
+
+vr::IVRSystem* g_openVRSystem = nullptr;
 
 using namespace cv;
 int main(const int argc, char** argv)
@@ -62,22 +68,21 @@ int main(const int argc, char** argv)
     exit(1);
 #endif
 
-    //openVRTest();
-    //openCvImageTest(argv[1]);
-    openCvCameraTest();
-    //executeGpuTestKernel();
+    initOpenVR();
+    openCvCameraRoutine();
+    shutdownOpenVR();
 
     return 0;
 }
 
-void openVRTest()
-{
 
+void initOpenVR()
+{
     vr::HmdError peError = vr::HmdError();
     //init open vr
-    auto system = vr::VR_Init( &peError, vr::EVRApplicationType::VRApplication_Overlay);
+    g_openVRSystem = vr::VR_Init( &peError, vr::EVRApplicationType::VRApplication_Overlay);
 
-    if (system == nullptr)
+    if (g_openVRSystem == nullptr)
     {
         std::cout << peError << std::endl;
     }
@@ -86,10 +91,16 @@ void openVRTest()
     {
         std::cout << "Started OpenVR with no error!" << std::endl;
     }
+}
 
+void shutdownOpenVR()
+{
+    //shutdown openvr
+    vr::VR_Shutdown();
+}
 
-
-    //auto OpenVrContext = vr::COpenVRContext();
+void openVRCameraCapture()
+{
     auto trackedCamera = vr::VRTrackedCamera();
     bool hasCamera;
     trackedCamera->HasCamera(vr::k_unTrackedDeviceIndex_Hmd, &hasCamera);
@@ -112,61 +123,59 @@ void openVRTest()
     error = trackedCamera->AcquireVideoStreamingService(vr::k_unTrackedDeviceIndex_Hmd, &cameraHandle);
     //size the image buffer
     vr::VRTextureBounds_t texture_bounds;
-    uint32_t width = 1920;
-    uint32_t height = 960;
+    uint32_t width = CAMERA_DOUBLE_WIDTH;
+    uint32_t height = CAMERA_HEIGHT;
     error = vr::VRTrackedCamera()->GetVideoStreamTextureSize(vr::k_unTrackedDeviceIndex_Hmd, vr::VRTrackedCameraFrameType_Distorted, &texture_bounds,
         &width, &height);
     if (error != vr::VRTrackedCameraError_None)
     {
         std::cout << error << std::endl;
-        width = 1920;
-        height = 960;
+        width = CAMERA_DOUBLE_WIDTH;
+        height = CAMERA_HEIGHT;
     }else
     {
         image.cols = width;
         image.rows = height;
     }
 
-
-
     uint32_t imageByteSize = width * height * image.channels();
 
-    auto start = std::chrono::steady_clock::now();
 
-    while (std::chrono::steady_clock::now() - start < std::chrono::duration<float>(60))
+    if (hasCamera)
     {
-        vr::TrackedDevicePose_t pose;
-        system->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated,
-            0, &pose, 1 );
 
-        if (hasCamera)
+        error = trackedCamera->GetVideoStreamFrameBuffer(cameraHandle, vr::VRTrackedCameraFrameType_Distorted,
+            &image.data, imageByteSize, nullptr, 0);
+
+        if (error != vr::VRTrackedCameraError_None)
         {
-
-            error = trackedCamera->GetVideoStreamFrameBuffer(cameraHandle, vr::VRTrackedCameraFrameType_Distorted,
-                &image.data, imageByteSize, nullptr, 0);
-
-            if (error != vr::VRTrackedCameraError_None)
-            {
-                std::cout << "error" << std::endl;
-            }
+            std::cout << "error, could not get video steam frame" << std::endl;
         }
-
-
-        float3 position = float3();
-        position.x = pose.mDeviceToAbsoluteTracking.m[0][3];
-        position.y = pose.mDeviceToAbsoluteTracking.m[1][3];
-        position.z = pose.mDeviceToAbsoluteTracking.m[2][3];
-
-        std::cout << position.x << " " << position.y << " " << position.z << std::endl;
-        std::this_thread::sleep_for(std::chrono::duration<float>(0.1f));
     }
-
-
-    //shutdown openvr
-    vr::VR_Shutdown();
-
 }
 
+
+void getHeadsetPose(vr::TrackedDevicePose_t pose)
+{
+    g_openVRSystem->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated,
+        0, &pose, 1 );
+
+    Vec3d position;
+    Vec3d rotation;
+    position.val[0] = pose.mDeviceToAbsoluteTracking.m[0][3];
+    position.val[1] = pose.mDeviceToAbsoluteTracking.m[1][3];
+    position.val[2]= pose.mDeviceToAbsoluteTracking.m[2][3];
+
+    //rotation.x = pose.mdeviceToAbsoluteTracking.m[0][3];
+
+    std::cout << position.val[0] << " " << position.val[1] << " " << position.val[2] << std::endl;
+}
+
+
+/**
+ * Draw function of Opengl to display two textures side by side
+ * @param param pointer to an array of texture2D pointers
+ */
 void onOpenGlDraw(void* param) {
     //param is a pointer to an array of texture2D pointers
     ogl::Texture2D* (*images)[] = (ogl::Texture2D* (*)[])param;
@@ -389,7 +398,6 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
             // Check if the entry is a regular file and has the correct extension
             if (entry.is_regular_file() && entry.path().extension() == ".png") {
                 imread(entry.path(), image);
-                //break image in half for left and right eye
                 leftImage = image(cv::Rect(0,0,image.cols/2,image.rows));
                 rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows));
                 //save image to calibration array
@@ -402,7 +410,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     else
     {
         std::cout << "Starting camera ..." << std::endl;
-        //todo can we do a partially obscure calibration pattern
+        //todo support a partially obscured calibration pattern
         std::cout << "Hold calibration sheet in full view of both cameras." << std::endl;
         std::cout << "Press <space bar> to capture calibration frame." << std::endl;
         std::cout << "Move calibration sheet to different areas of the camera and tilt." << std:: endl;
@@ -416,9 +424,8 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         Mat leftImage, rightImage;
 
 
-
         namedWindow("Display Camera Image", WINDOW_NORMAL);
-        resizeWindow("Display Camera Image", 1920, 960);
+        resizeWindow("Display Camera Image", CAMERA_DOUBLE_WIDTH, CAMERA_HEIGHT);
         while (true)
         {
             if (!camStreamer.tryGetFrame(&image))
@@ -450,7 +457,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         }
     }
 
-    //process calibration images
+    //========= process calibration images ===============
 
     // Prepare object points (0,0,0), (1,0,0), ..., (5,8,0) These are the calibration points in the xy plane of the calibration sheet
     std::vector<cv::Point3f> objp;
@@ -473,9 +480,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         imageSize = leftCalibrationImages[i].size();
         //convert images to greyscale
         Mat leftGrey;
-        cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
+        cuda::cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
         Mat rightGrey;
-        cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
+        cuda::cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
 
         //find the chess border corners
         std::vector<Point2f> cornersLeft;
@@ -513,7 +520,8 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         }
     }
 
-    //solve calibration
+    //========== solve calibration ===============
+
     *kLeft = Mat::zeros(3, 3, CV_64F);
     *kRight = Mat::zeros(3, 3, CV_64F);
 
@@ -537,9 +545,6 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     //find the camera's new intrinsic matrix for undistortion and rectification
     fisheye::estimateNewCameraMatrixForUndistortRectify(*kLeft, *dLeft, imageSize, Matx33d::eye(), *newKLeft, 1.0);
     fisheye::estimateNewCameraMatrixForUndistortRectify(*kRight, *dRight, imageSize, Matx33d::eye(), *newKRight, 1.0);
-
-    //TODO
-    //fisheye::stereoRectify()
 
     //print results
     std::cout << NumImages << " images used for calibration" << std::endl;
@@ -580,7 +585,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     }
 }
 
-void openCvCameraTest()
+void openCvCameraRoutine()
 {
     Mat camCalKLeft, camCalDLeft;
     Mat camCalKRight, camCalDRight;
@@ -590,10 +595,10 @@ void openCvCameraTest()
 
     Mat remapXLeft, remapYLeft, remapXRight, remapYRight;
 
-    Size imageSize = Size(960, 960);
+    Size imageSize = Size(CAMERA_WIDTH, CAMERA_HEIGHT);
 
 
-    // set coordinate system for markers
+    // set up coordinate system for markers
     g_MarkerObjPoints[0] = Point3d(-g_markerLength/2.f,g_markerLength/2.f,0);
     g_MarkerObjPoints[1] = Point3d(g_markerLength/2.f,g_markerLength/2.f,0);
     g_MarkerObjPoints[2] = Point3d(g_markerLength/2.f,-g_markerLength/2.f,0);
@@ -634,13 +639,14 @@ void openCvCameraTest()
     CameraStreamer camStreamer = CameraStreamer(0);
     std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // wait for stream to start
 
-    Mat image;
-    Mat leftImage, rightImage;
+    Mat image, leftImage, rightImage;
 
     //use calibration results to undistort live camera feed
-    Mat correctedLeftImage;
-    Mat correctedRightImage;
+    Mat correctedLeftImage, correctedRightImage;
 
+
+    // =============== CUDA setup ==================
+    //todo try to put this in a separate function
 
     namedWindow("GPU Image", WINDOW_NORMAL | WINDOW_OPENGL);
 
@@ -649,11 +655,10 @@ void openCvCameraTest()
     leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
     rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows)).clone();
 
-
     //upload image to GPU
     int imageBytes = image.step * image.rows;
-    int imageWidth = 1920 / 2;
-    int imageHeight = 960;
+    int imageWidth = CAMERA_WIDTH;
+    int imageHeight = CAMERA_HEIGHT;
 
     //compute optimal blocks and threads based on image size
     dim3 threadsPerBlock(32,32);
@@ -739,7 +744,7 @@ void openCvCameraTest()
         leftImage = image(cv::Rect(0,0,image.cols/2,image.rows)).clone();
         rightImage = image(cv::Rect(image.cols/2,0,image.cols/2,image.rows)).clone();
 
-        ////////////// GPU and CUDA processing
+        // =============== GPU and CUDA processing ==================
 
         //TODO look into using multiple cuda streams and multiple images in pipeline
         //send image to gpu
@@ -771,54 +776,74 @@ void openCvCameraTest()
 
 
 
-        //////////// CPU only image processing
+        // =============== aruco image processing ==================
 
         remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
         remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
 
         //find markers
-        std::vector<int> markerIds;
-        std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
+        std::vector<int> markerIdsLeft, markerIdsRight;
+        std::vector<std::vector<cv::Point2f>> markerCornersLeft, markerCornersRight, rejectedCandidates;
         aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
         detectorParams.cornerRefinementMethod = aruco::CORNER_REFINE_NONE;
         cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
         cv::aruco::GpuArucoDetector detector(dictionary, detectorParams);
-        detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
+        detector.detectMarkers(correctedLeftImage, markerCornersLeft, markerIdsLeft, rejectedCandidates);
+        detector.detectMarkers(correctedRightImage, markerCornersRight, markerIdsRight, rejectedCandidates);
 
-        size_t nMarkers = markerCorners.size();
-        std::vector<Vec3d> rvecs(nMarkers), tvecs(nMarkers);
-
+        size_t nMarkersLeft = markerCornersLeft.size();
+        size_t nMarkersRight = markerCornersRight.size();
+        std::vector<Vec3d> rvecsLeft(nMarkersLeft), tvecsLeft(nMarkersLeft);
+        std::vector<Vec3d> rvecsRight(nMarkersRight), tvecsRight(nMarkersRight);
         std::vector<float> empty_vec;
 
         // Calculate pose for each marker
-        for (size_t i = 0; i < nMarkers; i++) {
-            solvePnP(g_MarkerObjPoints, markerCorners.at(i), camCalKLeft,
-                empty_vec, rvecs.at(i), tvecs.at(i));
+        for (size_t i = 0; i < nMarkersLeft; i++) {
+            solvePnP(g_MarkerObjPoints, markerCornersLeft.at(i), camCalKLeft,
+                empty_vec, rvecsLeft.at(i), tvecsLeft.at(i));
+        }
+        for (size_t i = 0; i < nMarkersRight; i++) {
+            solvePnP(g_MarkerObjPoints, markerCornersRight.at(i), camCalKRight,
+                empty_vec, rvecsRight.at(i), tvecsRight.at(i));
         }
 
-        // draw results
-        Mat imageCopy;
-        correctedLeftImage.copyTo(imageCopy);
-        if(!markerIds.empty()) {
-            cv::aruco::drawDetectedMarkers(imageCopy, markerCorners, markerIds);
+        // draw marker results
+        Mat imageCopyLeft, imageCopyRight;
+        correctedLeftImage.copyTo(imageCopyLeft);
+        correctedRightImage.copyTo(imageCopyRight);
+        if(!markerIdsLeft.empty()) {
+            cv::aruco::drawDetectedMarkers(imageCopyLeft, markerCornersLeft, markerIdsLeft);
 
+            for(unsigned int i = 0; i < markerIdsLeft.size(); i++)
+                cv::drawFrameAxes(imageCopyLeft, camCalKLeft, empty_vec, rvecsLeft[i],
+                    tvecsLeft[i], g_markerLength * 1.5f, 2);
 
-            for(unsigned int i = 0; i < markerIds.size(); i++)
-                cv::drawFrameAxes(imageCopy, camCalKLeft, empty_vec, rvecs[i],
-                    tvecs[i], g_markerLength * 1.5f, 2);
+        }
+        if(!markerIdsRight.empty()) {
+            cv::aruco::drawDetectedMarkers(imageCopyRight, markerCornersRight, markerIdsRight);
+
+            for(unsigned int i = 0; i < markerIdsRight.size(); i++)
+                cv::drawFrameAxes(imageCopyRight, camCalKRight, empty_vec, rvecsRight[i],
+                    tvecsRight[i], g_markerLength * 1.5f, 2);
 
         }
 
-        imshow ("marker detection", imageCopy);
-
-        imshow("Corrected Left Image", correctedLeftImage);
-        imshow("Corrected Right Image", correctedRightImage);
-
-        imshow ("Raw image", image);
+        //get headset pose and translate marker tag to openVR space
+        vr::TrackedDevicePose_t pose;
+        getHeadsetPose(pose);
 
 
+        //todo: matrix multiplication for marker world position
+        // for(unsigned int i = 0; i < markerIds.size(); i++)
+        // {
+        //     Vec3d markerWorldPosition = pose.mDeviceToAbsoluteTracking.m * tvecs[i];
+        // }
 
-        ///////// end cpu only image processing
+
+        imshow ("marker detection left", imageCopyLeft);
+        imshow ("marker detection right", imageCopyRight);
+
+        // =============== End image processing ==================
 
     }
 
@@ -865,66 +890,4 @@ void unsetResourcesCudaAccess(std::vector<cudaSurfaceObject_t>* surfaces, std::v
         //remove reference to surface in vector after delete
         surfaces->erase(surfaces->begin());
     }
-}
-
-
-
-void cpuMarkerDetection(const Mat* image, Mat* camCalKLeft, Mat* camCalDLeft, Mat* camCalKRight, Mat* camCalDRight,
-    Mat* camCalNewKLeft, Mat* camCalNewKRight)
-{
-
-
-}
-
-void executeGpuTestKernel()
-{
-    int arraySize = 5000;
-
-    //allocate memory on CPU
-    auto CpuIn1 = (float*) malloc(sizeof(float) * arraySize);
-    auto CpuIn2 = (float*) malloc(sizeof(float) * arraySize);
-    auto CpuResult = (float*) malloc(sizeof(float) * arraySize);
-
-    //populate values.
-    srand(time(NULL));
-    for(int i=0; i < arraySize; i++){
-        CpuIn1[i] = (rand() / float(RAND_MAX)) * 1000.0f;
-        CpuIn2[i] = (rand() / float(RAND_MAX)) * 1000.0f;
-    }
-
-    //allocate memory on gpu
-    float *GpuIn1;
-    float *GpuIn2;
-    float *GpuResult;
-
-    cudaMalloc((void**)&GpuIn1, sizeof(float) * arraySize);
-    cudaMalloc((void**)&GpuIn2, sizeof(float) * arraySize);
-    cudaMalloc((void**)&GpuResult, sizeof(float) * arraySize);
-
-    //copy data into GPU memory
-    cudaMemcpy(GpuIn1, CpuIn1, sizeof(float) * arraySize, cudaMemcpyHostToDevice);
-    cudaMemcpy(GpuIn2, CpuIn2, sizeof(float) * arraySize, cudaMemcpyHostToDevice);
-
-    GpuKernelVectorAdd<<<256, 256, 0>>>(GpuIn1, GpuIn2, GpuResult);
-
-    //copy results from gpu to cpu memory
-    cudaMemcpy(CpuResult, GpuResult, sizeof(float) * arraySize, cudaMemcpyDeviceToHost);
-
-
-    //print out results
-    for (int i=0; i < arraySize; i++)
-    {
-        printf("%f + %f = %f \n", CpuIn1[i], CpuIn2[i], CpuResult[i]);
-    }
-
-
-    //free memory from GPU
-    cudaFree(GpuIn1);
-    cudaFree(GpuIn2);
-    cudaFree(GpuResult);
-
-    //free memory from CPU
-    free(CpuIn1);
-    free(CpuIn2);
-    free(CpuResult);
 }

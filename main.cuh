@@ -17,13 +17,15 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 }
 
 
-void openCvCameraTest();
+void openCvCameraRoutine();
 
 void openCvImageTest(const std::string& imgPath);
 
-void executeGpuTestKernel();
 
-void openVRTest();
+void initOpenVR();
+void shutdownOpenVR();
+void openVRCameraCapture();
+void getHeadsetPose(vr::TrackedDevicePose_t pose);
 
 
 void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
