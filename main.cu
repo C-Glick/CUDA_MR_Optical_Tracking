@@ -894,6 +894,23 @@ void openCvCameraRoutine()
             //     Vec3d markerWorldPosition = pose.mDeviceToAbsoluteTracking.m * tvecs[i];
             // }
 
+            //======= print marker locations  ============
+            for (int i=0; i < markerIdsLeft.size(); i++)
+            {
+                std::cout << "Left ID: " << std::left << markerIdsLeft.at(i) << " ";
+                std::cout << "X: " << tvecsLeft[i][0] << " ";
+                std::cout << "Y: " << tvecsLeft[i][1] << " " ;
+                std::cout << "Z: " << tvecsLeft[i][1] << std::endl ;
+            }
+
+            for (int i=0; i < markerIdsRight.size(); i++)
+            {
+                std::cout << "Right ID: " << std::left << markerIdsRight.at(i) << " ";
+                std::cout << "X: " << tvecsRight[i][0] << " ";
+                std::cout << "Y: " << tvecsRight[i][1] << " " ;
+                std::cout << "Z: " << tvecsRight[i][1] << std::endl ;
+            }
+
 
             imshow ("marker detection left", imageCopyLeft);
             imshow ("marker detection right", imageCopyRight);
@@ -911,6 +928,7 @@ void openCvCameraRoutine()
     cudaFree(gpuImage);
     destroyAllWindows();
 }
+
 
 cudaSurfaceObject_t setResourceCudaAccess(cudaGraphicsResource_t resource)
 {

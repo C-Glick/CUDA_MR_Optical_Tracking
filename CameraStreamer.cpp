@@ -56,6 +56,7 @@ void CameraStreamer::cameraCaptureThread()
         }else
         {
             std::cerr << "Failed to capture frame" << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
     }
 }
