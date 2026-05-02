@@ -185,7 +185,7 @@ static void _gpu_threshold(InputArray _in, OutputArray _out, int winSize, double
 
     //start kernel to process data
     GpuKernelAdaptiveThresholdMeanCBinaryInv<<<numBlocks, threadsPerBlock>>>((char*) imageInHandle, (char*) imageOutHandle,
-            gpuimageIn.cols, gpuimageIn.rows, gpuimageIn.isContinuous() ,gpuimageIn.step, 255, winSize, constant);
+            gpuimageIn.cols, gpuimageIn.rows, gpuimageIn.isContinuous(), step, 255, winSize, constant);
 
     //copy data back to cpu
     gpuimageOut.download(_out);

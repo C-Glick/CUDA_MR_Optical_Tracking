@@ -27,7 +27,6 @@ using json = nlohmann::json;
 #define ESCAPE_KEY 27
 #define SPACE_KEY 32
 
-#define CALIBRATION_PATH "./camera_calibration" //TODO read calibration path from command line
 #define CALIBRATION_FILE "calibration_params.json"
 #define CALIBRATION_IMAGE_FILE "calibration_image_"
 
@@ -53,6 +52,8 @@ int main(const int argc, char** argv)
         "{video   |<none>| Sample video to display usage on systems that do not have the same VR hardware }"
         "{cameraID      | 0 | The camera index to use }"
         "{gpuOnly      | false | Only runs gpu code to show fast processing and direct display of image through OpenGL interfaces}"
+        "{calibration      | ./camera_calibration | path of the directory that holds, or will save the camera calibration to}"
+
 
       ;
 
@@ -264,6 +265,9 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
     Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation,
     std::vector<cv::Mat>* calibrationImages)
 {
+
+    String calibrationPath = g_parser->get<String>("calibration");
+
     json j;
     //convert OpenCV matrices to 2D arrays which work nicely with json library
     auto kLeftArray = copyMatTo2dVector(kLeft);
@@ -288,25 +292,25 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
     j["stereoCamTranslation"] = stereoCamTranslationArray;
     j["stereoCamRotation"] = stereoCamRotationArray;
 
-    std::filesystem::create_directories(CALIBRATION_PATH);
-    std::ofstream out((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+    std::filesystem::create_directories(calibrationPath);
+    std::ofstream out(calibrationPath + "/" + CALIBRATION_FILE);
     if (!out.is_open())
     {
-        std::cerr << "Failed to open file " << CALIBRATION_PATH << "/" << CALIBRATION_FILE<< std::endl;
+        std::cerr << "Failed to open file " << calibrationPath << "/" << CALIBRATION_FILE<< std::endl;
     }
     out << std::setw(4) << j << std::endl;
     out.close();
 
 
-    std::cout << "Wrote to disk, reading back to verify data integrity " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
+    std::cout << "Wrote to disk, reading back to verify data integrity " << calibrationPath << "/" << CALIBRATION_FILE << std::endl;
 
     if (verifySavedCalibration(kLeft, dLeft, kRight, dRight, newKLeft, newKRight, stereoCamTranslation,
         stereoCamRotation))
     {
-        std::cout << "Calibration successfully saved to disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
+        std::cout << "Calibration successfully saved to disk " << calibrationPath << "/" << CALIBRATION_FILE << std::endl;
     }else
     {
-        std::cerr << "ERROR: Calibration failed to save to disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
+        std::cerr << "ERROR: Calibration failed to save to disk " << calibrationPath << "/" << CALIBRATION_FILE << std::endl;
     }
 
     if (calibrationImages != nullptr)
@@ -316,7 +320,7 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
         int i=0;
         for (Mat image : *calibrationImages)
         {
-            std::string fileName = std::string(CALIBRATION_PATH) + "/" + CALIBRATION_IMAGE_FILE + std::to_string(i) + ".png";
+            std::string fileName = calibrationPath + "/" + CALIBRATION_IMAGE_FILE + std::to_string(i) + ".png";
             std::vector<int> compression_params;
             compression_params.push_back(IMWRITE_PNG_COMPRESSION);
             compression_params.push_back(6);
@@ -325,7 +329,7 @@ void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRigh
             i++;
         }
 
-        std::cout << "Raw calibration images saved to disk " << CALIBRATION_PATH << std::endl;
+        std::cout << "Raw calibration images saved to disk " << calibrationPath << std::endl;
     }
 }
 
@@ -364,7 +368,11 @@ bool verifySavedCalibration(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
 void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
     Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation)
 {
-    std::ifstream inFile((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+
+    String calibrationPath = g_parser->get<String>("calibration");
+
+
+    std::ifstream inFile(calibrationPath + "/" + CALIBRATION_FILE);
     json jData = json::parse(inFile);
 
     std::vector<std::vector<double>> kLeftArray = jData["kLeft"];
@@ -387,12 +395,12 @@ void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRi
     *stereoCamTranslation = copy2dVectorToMat(stereoCamTranslationArray);
     *stereoCamRotation = copy2dVectorToMat(stereoCamRotationArray);
 
-    std::cout << "Calibration read from disk " << CALIBRATION_PATH << "/" << CALIBRATION_FILE << std::endl;
+    std::cout << "Calibration read from disk " << calibrationPath << "/" << CALIBRATION_FILE << std::endl;
 }
 
 bool checkForCameraCalibration()
 {
-    std::ifstream inFile((std::string)CALIBRATION_PATH + "/" + CALIBRATION_FILE);
+    std::ifstream inFile(g_parser->get<String>("calibration") + "/" + CALIBRATION_FILE);
     bool result = inFile.is_open();
     inFile.close();
     return result;
@@ -406,12 +414,14 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     std::vector<cv::Mat> rightCalibrationImages;
     std::vector<cv::Mat> combinedCalibrationImages;
 
+    String calibrationPath = g_parser->get<String>("calibration");
+
 
     std::cout << "Calibrating cameras ..." << std::endl;
     bool loadCalibrationImagesFromFile = false;
-    if (std::filesystem::exists(CALIBRATION_PATH))
+    if (std::filesystem::exists(calibrationPath))
     {
-        std::cout << "Load calibration images from disk? " << CALIBRATION_PATH << " (Y/N)" <<  std::endl;
+        std::cout << "Load calibration images from disk? " << calibrationPath << " (Y/N)" <<  std::endl;
         std::string response;
         std::cin >> response;
         loadCalibrationImagesFromFile = (response == "y" || response == "Y");
@@ -422,7 +432,7 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         Mat image;
         Mat leftImage, rightImage;
 
-        for (const auto& entry : std::filesystem::directory_iterator(CALIBRATION_PATH)) {
+        for (const auto& entry : std::filesystem::directory_iterator(calibrationPath)) {
             // Check if the entry is a regular file and has the correct extension
             if (entry.is_regular_file() && entry.path().extension() == ".png") {
                 imread(entry.path(), image);
@@ -507,9 +517,9 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         imageSize = leftCalibrationImages[i].size();
         //convert images to greyscale
         Mat leftGrey;
-        cuda::cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
+        cvtColor(leftCalibrationImages[i], leftGrey, COLOR_BGR2GRAY);
         Mat rightGrey;
-        cuda::cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
+        cvtColor(rightCalibrationImages[i], rightGrey, COLOR_BGR2GRAY);
 
         //find the chess border corners
         std::vector<Point2f> cornersLeft;
@@ -558,6 +568,12 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
     *dRight = Mat::zeros(4, 1, CV_64F);
 
     int NumImages = static_cast<int>(objPoints.size());
+
+    if (NumImages <= 0)
+    {
+        std::cerr << "Failed to find calibration pattern in any images. Aborting." << std::endl;
+        exit(-1);
+    }
 
     std::vector<cv::Mat> rvecs, tvecs;
 
