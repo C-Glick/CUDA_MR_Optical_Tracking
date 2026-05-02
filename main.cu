@@ -2,7 +2,6 @@
 #include "CameraStreamer.h"
 #include "aruco/GpuArucoDetector.cuh"
 
-//#include <opencv2/opencv.hpp>
 #include <fstream>
 #include <thread>
 #include <string>
@@ -17,7 +16,6 @@
 #include "Cuda_Func.cuh"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgproc.hpp>
-#include <format>
 
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
@@ -49,10 +47,13 @@ using namespace cv;
 int main(const int argc, char** argv)
 {
     const String commandLineKeys =
-      "{help h usage ? |      | Print this message   }"
-      "{debug          |false | Display debug views and print debug messages }"
-      "{sampleVideo   |<none>| Sample video to display usage on systems that do not have the same VR hardware }"
-      "{cameraID      | 0 | The camera index to use }"
+        "{help h usage ? |      | Print this message   }"
+        "{debug          |false | Display debug views and print debug messages }"
+        "{noSteamVR      |false | disables SteamVR calls for systems who do not have it installed }"
+        "{video   |<none>| Sample video to display usage on systems that do not have the same VR hardware }"
+        "{cameraID      | 0 | The camera index to use }"
+        "{gpuOnly      | false | Only runs gpu code to show fast processing and direct display of image through OpenGL interfaces}"
+
       ;
 
     g_parser = std::make_shared<CommandLineParser>(argc, argv, commandLineKeys);
@@ -89,7 +90,10 @@ int main(const int argc, char** argv)
     exit(1);
 #endif
 
-    initOpenVR();
+    if (!g_parser->get<bool>("noSteamVR"))
+    {
+        initOpenVR();
+    }
     openCvCameraRoutine();
     shutdownOpenVR();
 
@@ -178,18 +182,21 @@ void openVRCameraCapture()
 
 void getHeadsetPose(vr::TrackedDevicePose_t pose)
 {
-    g_openVRSystem->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated,
+    if (g_openVRSystem != nullptr)
+    {
+        g_openVRSystem->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseSeated,
         0, &pose, 1 );
 
-    Vec3d position;
-    Vec3d rotation;
-    position.val[0] = pose.mDeviceToAbsoluteTracking.m[0][3];
-    position.val[1] = pose.mDeviceToAbsoluteTracking.m[1][3];
-    position.val[2]= pose.mDeviceToAbsoluteTracking.m[2][3];
+        Vec3d position;
+        Vec3d rotation;
+        position.val[0] = pose.mDeviceToAbsoluteTracking.m[0][3];
+        position.val[1] = pose.mDeviceToAbsoluteTracking.m[1][3];
+        position.val[2]= pose.mDeviceToAbsoluteTracking.m[2][3];
 
-    //rotation.x = pose.mdeviceToAbsoluteTracking.m[0][3];
+        //rotation.x = pose.mdeviceToAbsoluteTracking.m[0][3];
 
-    std::cout << position.val[0] << " " << position.val[1] << " " << position.val[2] << std::endl;
+        std::cout << position.val[0] << " " << position.val[1] << " " << position.val[2] << std::endl;
+    }
 }
 
 
@@ -660,9 +667,9 @@ void openCvCameraRoutine()
       camCalNewKRight, imageSize, CV_32FC1, remapXRight, remapYRight);
 
     std::shared_ptr<CameraStreamer> camStreamer;
-    if (g_parser->has("sampleVideo"))
+    if (g_parser->has("video"))
     {
-        String filepath = g_parser->get<String>("sampleVideo");
+        String filepath = g_parser->get<String>("video");
         camStreamer = std::make_shared<CameraStreamer>(filepath);
     }else
     {
@@ -809,70 +816,73 @@ void openCvCameraRoutine()
 
         // =============== aruco image processing ==================
 
-        remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
-        remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
+        if (!g_parser->get<bool>("gpuOnly"))
+        {
+            remap(leftImage, correctedLeftImage, remapXLeft, remapYLeft, INTER_LINEAR, BORDER_CONSTANT);
+            remap(rightImage, correctedRightImage, remapXRight, remapYRight, INTER_LINEAR, BORDER_CONSTANT);
 
-        //find markers
-        std::vector<int> markerIdsLeft, markerIdsRight;
-        std::vector<std::vector<cv::Point2f>> markerCornersLeft, markerCornersRight, rejectedCandidates;
-        aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
-        detectorParams.cornerRefinementMethod = aruco::CORNER_REFINE_NONE;
-        cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-        cv::aruco::GpuArucoDetector detector(dictionary, detectorParams);
-        detector.detectMarkers(correctedLeftImage, markerCornersLeft, markerIdsLeft, rejectedCandidates);
-        detector.detectMarkers(correctedRightImage, markerCornersRight, markerIdsRight, rejectedCandidates);
+            //find markers
+            std::vector<int> markerIdsLeft, markerIdsRight;
+            std::vector<std::vector<cv::Point2f>> markerCornersLeft, markerCornersRight, rejectedCandidates;
+            aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+            detectorParams.cornerRefinementMethod = aruco::CORNER_REFINE_NONE;
+            cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
+            cv::aruco::GpuArucoDetector detector(dictionary, detectorParams);
+            detector.detectMarkers(correctedLeftImage, markerCornersLeft, markerIdsLeft, rejectedCandidates);
+            detector.detectMarkers(correctedRightImage, markerCornersRight, markerIdsRight, rejectedCandidates);
 
-        size_t nMarkersLeft = markerCornersLeft.size();
-        size_t nMarkersRight = markerCornersRight.size();
-        std::vector<Vec3d> rvecsLeft(nMarkersLeft), tvecsLeft(nMarkersLeft);
-        std::vector<Vec3d> rvecsRight(nMarkersRight), tvecsRight(nMarkersRight);
-        std::vector<float> empty_vec;
+            size_t nMarkersLeft = markerCornersLeft.size();
+            size_t nMarkersRight = markerCornersRight.size();
+            std::vector<Vec3d> rvecsLeft(nMarkersLeft), tvecsLeft(nMarkersLeft);
+            std::vector<Vec3d> rvecsRight(nMarkersRight), tvecsRight(nMarkersRight);
+            std::vector<float> empty_vec;
 
-        // Calculate pose for each marker
-        for (size_t i = 0; i < nMarkersLeft; i++) {
-            solvePnP(g_MarkerObjPoints, markerCornersLeft.at(i), camCalKLeft,
-                empty_vec, rvecsLeft.at(i), tvecsLeft.at(i));
+            // Calculate pose for each marker
+            for (size_t i = 0; i < nMarkersLeft; i++) {
+                solvePnP(g_MarkerObjPoints, markerCornersLeft.at(i), camCalKLeft,
+                    empty_vec, rvecsLeft.at(i), tvecsLeft.at(i));
+            }
+            for (size_t i = 0; i < nMarkersRight; i++) {
+                solvePnP(g_MarkerObjPoints, markerCornersRight.at(i), camCalKRight,
+                    empty_vec, rvecsRight.at(i), tvecsRight.at(i));
+            }
+
+            // draw marker results
+            Mat imageCopyLeft, imageCopyRight;
+            correctedLeftImage.copyTo(imageCopyLeft);
+            correctedRightImage.copyTo(imageCopyRight);
+            if(!markerIdsLeft.empty()) {
+                cv::aruco::drawDetectedMarkers(imageCopyLeft, markerCornersLeft, markerIdsLeft);
+
+                for(unsigned int i = 0; i < markerIdsLeft.size(); i++)
+                    cv::drawFrameAxes(imageCopyLeft, camCalKLeft, empty_vec, rvecsLeft[i],
+                        tvecsLeft[i], g_markerLength * 1.5f, 2);
+
+            }
+            if(!markerIdsRight.empty()) {
+                cv::aruco::drawDetectedMarkers(imageCopyRight, markerCornersRight, markerIdsRight);
+
+                for(unsigned int i = 0; i < markerIdsRight.size(); i++)
+                    cv::drawFrameAxes(imageCopyRight, camCalKRight, empty_vec, rvecsRight[i],
+                        tvecsRight[i], g_markerLength * 1.5f, 2);
+
+            }
+
+            //get headset pose and translate marker tag to openVR space
+            vr::TrackedDevicePose_t pose;
+            getHeadsetPose(pose);
+
+
+            //todo: matrix multiplication for marker world position
+            // for(unsigned int i = 0; i < markerIds.size(); i++)
+            // {
+            //     Vec3d markerWorldPosition = pose.mDeviceToAbsoluteTracking.m * tvecs[i];
+            // }
+
+
+            imshow ("marker detection left", imageCopyLeft);
+            imshow ("marker detection right", imageCopyRight);
         }
-        for (size_t i = 0; i < nMarkersRight; i++) {
-            solvePnP(g_MarkerObjPoints, markerCornersRight.at(i), camCalKRight,
-                empty_vec, rvecsRight.at(i), tvecsRight.at(i));
-        }
-
-        // draw marker results
-        Mat imageCopyLeft, imageCopyRight;
-        correctedLeftImage.copyTo(imageCopyLeft);
-        correctedRightImage.copyTo(imageCopyRight);
-        if(!markerIdsLeft.empty()) {
-            cv::aruco::drawDetectedMarkers(imageCopyLeft, markerCornersLeft, markerIdsLeft);
-
-            for(unsigned int i = 0; i < markerIdsLeft.size(); i++)
-                cv::drawFrameAxes(imageCopyLeft, camCalKLeft, empty_vec, rvecsLeft[i],
-                    tvecsLeft[i], g_markerLength * 1.5f, 2);
-
-        }
-        if(!markerIdsRight.empty()) {
-            cv::aruco::drawDetectedMarkers(imageCopyRight, markerCornersRight, markerIdsRight);
-
-            for(unsigned int i = 0; i < markerIdsRight.size(); i++)
-                cv::drawFrameAxes(imageCopyRight, camCalKRight, empty_vec, rvecsRight[i],
-                    tvecsRight[i], g_markerLength * 1.5f, 2);
-
-        }
-
-        //get headset pose and translate marker tag to openVR space
-        vr::TrackedDevicePose_t pose;
-        getHeadsetPose(pose);
-
-
-        //todo: matrix multiplication for marker world position
-        // for(unsigned int i = 0; i < markerIds.size(); i++)
-        // {
-        //     Vec3d markerWorldPosition = pose.mDeviceToAbsoluteTracking.m * tvecs[i];
-        // }
-
-
-        imshow ("marker detection left", imageCopyLeft);
-        imshow ("marker detection right", imageCopyRight);
 
         if (g_debug)
         {
