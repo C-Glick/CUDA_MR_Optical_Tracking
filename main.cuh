@@ -16,30 +16,52 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
     }
 }
 
-
+/**
+ * Main routine of OpenCV to display camera image, correct camera distortion, and find and track
+ * aruco markers
+ */
 void openCvCameraRoutine();
 
-void openCvImageTest(const std::string& imgPath);
-
-
+/**
+ * Initialize OpenVR systems
+ */
 void initOpenVR();
+/**
+ * Shutdown OpenVR systems
+ */
 void shutdownOpenVR();
+/**
+ * Capture the headset's camera feed through OpenVR systems. Note: This is currently
+ * only implemented in Windows by SteamVR.
+ */
 void openVRCameraCapture();
+/**
+ * Returns the tracked pose of the head from SteamVR. Use this to translate
+ * aruco tracked items from camera coordinates to world coordinates
+ * @param pose Headpose from OpenVR
+ */
 void getHeadsetPose(vr::TrackedDevicePose_t pose);
 
-
+/**
+ * Save the provided camera parameters to file
+ *
+ */
 void saveCameraCalibrationToFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation, std::vector<cv::Mat>* calibrationImages);
+                                 Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation, std::vector<cv::Mat>* calibrationImages);
 
+/**
+ * Read the camera calibration from file. Fills out the parameters passed in
+ */
 void readCameraCalibrationFromFile(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation);
+                                   Mat* newKLeft, Mat* newKRight, Mat* stereoCamTranslation, Mat* stereoCamRotation);
 
+/**
+ * Verifies that the camera calibration file was successfully saved to disk by
+ * reading it back and checking against values in memory.
+ * @return
+ */
 bool verifySavedCalibration(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight,
-    Mat* newKLeft, Mat* newKRight,  Mat* stereoCamTranslation, Mat* stereoCamRotation);
-
-
-void cpuMarkerDetection(const Mat* image, Mat* camCalKLeft, Mat* camCalDLeft, Mat* camCalKRight, Mat* camCalDRight,
-    Mat* camCalNewKLeft, Mat* camCalNewKRight);
+                            Mat* newKLeft, Mat* newKRight,  Mat* stereoCamTranslation, Mat* stereoCamRotation);
 
 /**
  * Signal CUDA has exclusive access to this resource

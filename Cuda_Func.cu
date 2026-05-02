@@ -1,22 +1,5 @@
 #include "Cuda_Func.cuh"
-
 #include "opencv2/core/cuda_types.hpp"
-
-
-/**
- * Compute the frame's luminance values and send pixel results back to CPU
- * @param frame
- * @param frameNumber
- * @param luminance
- * @param width
- * @param height
- */
-__global__ void GpuKernelVectorAdd (const float* in1, const float* in2, float* out)
-{
-    int threadIndex = (blockIdx.x * blockDim.x) + threadIdx.x;
-
-    out[threadIndex] = in1[threadIndex] + in2[threadIndex];
-}
 
 
 __global__ void GpuKernelColorChange (cudaSurfaceObject_t image, int width, int height)
@@ -71,7 +54,6 @@ __global__ void GpuKernelRemapImage (cudaSurfaceObject_t inputImage,
         int srcX = round(map1[row*width + col]);
         int srcY = round(map2[row*width + col]);
 
-        //todo set pixels outside range to black
         //clamp srcX and srcY to the image size
         srcX = max(0, min(srcX, width-1));
         srcY = max(0, min(srcY, height-1));

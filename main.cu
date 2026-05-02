@@ -27,9 +27,9 @@ using json = nlohmann::json;
 #define ESCAPE_KEY 27
 #define SPACE_KEY 32
 
-#define CALIBRATION_PATH "./camera_calibration"
+#define CALIBRATION_PATH "./camera_calibration" //TODO read calibration path from command line
 #define CALIBRATION_FILE "calibration_params.json"
-#define CALIBRATION_IMAGE_FILE "calibration_image_" //calibration_image_001.png
+#define CALIBRATION_IMAGE_FILE "calibration_image_"
 
 #define CAMERA_WIDTH 960
 #define CAMERA_HEIGHT 960
@@ -446,7 +446,6 @@ void calibrateCameras(Mat* kLeft, Mat* dLeft, Mat* kRight, Mat* dRight, Mat* new
         std::cout << "Press <ESC> once finished." << std::endl;
 
         //start up headset camera and capture calibration images
-        //TODO allow the index to change so we can select the correct camera(s)
         CameraStreamer camStreamer = CameraStreamer(g_parser->get<int>("cameraID"));
         Mat image;
         Mat leftImage, rightImage;
@@ -754,7 +753,7 @@ void openCvCameraRoutine()
         std::cerr << "Right map is not continuous!" << std::endl;
     }
 
-    //allocate memory on gpu
+    //allocate remap memory on gpu
     float *gpuMapXLeft, *gpuMapYLeft, *gpuMapXRight, *gpuMapYRight;
     int mapSizeBytes = remapXLeft.cols * remapXLeft.rows * sizeof(float);
     gpuErrchk(cudaMalloc((void**)&gpuMapXLeft, mapSizeBytes));

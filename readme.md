@@ -1,5 +1,7 @@
 # Course Project: 3D Object Camera Tracking in VR / MR Headsets
 
+This application demonstrates uses of CUDA to augment Aruco marker tracking for mixed reality applications.
+
 Simplification: 
 - track an aruco tag in camera space and transform to world space using head pose
 - get raw image from cameras, pass onto GPU to do the warp
@@ -7,6 +9,26 @@ Simplification:
 - also send headset pose to GPU with time code
 - transform camera relative position to world position
 - send position back to application and use to render item
+
+## Key features
+- Interaction between multiple libraries and technologies, OpenCV, CUDA, OpenVR, and OpenGL
+- CMake automation 
+- OpenCV custom compilation with CUDA support for hardware accelerated basic operations
+- Camera calibration
+    - Calibration process to capture camera intrinsic properties used for distortion correction
+    - Saves camera calibration to disk for later usage
+- Reads high definition video feed using OpenCV in real time 
+    - CameraStreamer class with seperate capture thread to capture images in real time asynchronous of processing, ensures
+      always working on the latest data if algorithm runs slower than frame rate
+- Integrates with OpenGL, Places captured data into OpenGL texture
+- Passes OpenGL texture access to CUDA and runs image modification kernels on texture
+    - Implemented remapping function in CUDA to correct image distortion
+- Displays the corrected image directly to screen without copying back to CPU, CUDA hands access back to OpenGL for rendering
+- Implements adaptive thresholding in GPU during aruco code detection
+    - Extended the ArucoDetector class from OpenCV with new class GpuArucoDetector. 
+    - GpuArucoDetector uses adaptive thresholding in CUDA to speed up parts of the tracking
+- Uses OpenCV functions to find aruco codes in the image and tracks them in 3D space relative to the camera
+- Communicates with OpenVR to track VR headset position and translate aruco markers into world space coordinates
 
 ## Prerequisite Dependencies
 - Standard C++ toolchain
@@ -45,3 +67,4 @@ Simplification:
 # clean project
 - From the root of the project run `./clean_root.sh` this will remove the root project clean  
 - From the root of the project run `./clean_opencv.sh` this will remove the opencv build directory
+

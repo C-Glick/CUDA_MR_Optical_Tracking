@@ -146,6 +146,7 @@ static void _threshold(InputArray _in, OutputArray _out, int winSize, double con
 
 /**
  * adaptive thresholding on GPU
+ *  @author Colton Glick
  */
 static void _gpu_threshold(InputArray _in, OutputArray _out, int winSize, double constant)
 {
