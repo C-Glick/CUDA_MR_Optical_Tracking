@@ -11,8 +11,17 @@ add_executable(${PROJECT_NAME} main.cu
         external/nlohmann/json.hpp
         CameraStreamer.cpp
         CameraStreamer.h
-        GpuArucoDetector.cpp
-        GpuArucoDetector.h
+        aruco/GpuArucoDetector.cpp
+        aruco/GpuArucoDetector.hpp
+        aruco/aruco_utils.cpp
+        aruco/aruco_utils.hpp
+        aruco/apriltag/apriltag_quad_thresh.cpp
+        aruco/apriltag/apriltag_quad_thresh.hpp
+        aruco/apriltag/predefined_dictonaries_apriltag.h
+        aruco/apriltag/unionfind.hpp
+        aruco/apriltag/zarray.hpp
+        aruco/apriltag/zmaxheap.hpp
+        aruco/apriltag/zmaxheap.cpp
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")
