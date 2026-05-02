@@ -11,8 +11,8 @@ add_executable(${PROJECT_NAME} main.cu
         external/nlohmann/json.hpp
         CameraStreamer.cpp
         CameraStreamer.h
-        aruco/GpuArucoDetector.cpp
-        aruco/GpuArucoDetector.hpp
+        aruco/GpuArucoDetector.cu
+        aruco/GpuArucoDetector.cuh
         aruco/aruco_utils.cpp
         aruco/aruco_utils.hpp
         aruco/apriltag/apriltag_quad_thresh.cpp

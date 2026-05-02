@@ -1,6 +1,7 @@
-// This file is part of OpenCV project.
-// It is subject to the license terms in the LICENSE file found in the top-level directory
-// of this distribution and at http://opencv.org/license.html
+
+
+//New additions for GPU functions
+#include "../Cuda_Func.cuh"
 
 #ifndef __OPENCV_PRECOMP_H__
 #define __OPENCV_PRECOMP_H__
@@ -19,15 +20,18 @@
 
 #endif
 
+
 #include <opencv2/calib3d.hpp>
 
-#include "GpuArucoDetector.hpp"
+#include "GpuArucoDetector.cuh"
 #include "opencv2/objdetect/aruco_board.hpp"
 #include "apriltag/apriltag_quad_thresh.hpp"
 #include "aruco_utils.hpp"
 #include <algorithm>
 #include <cmath>
 #include <map>
+
+#include "opencv2/core/cuda.hpp"
 
 namespace cv {
 namespace aruco {
@@ -137,6 +141,54 @@ static void _threshold(InputArray _in, OutputArray _out, int winSize, double con
     CV_Assert(winSize >= 3);
     if(winSize % 2 == 0) winSize++; // win size must be odd
     adaptiveThreshold(_in, _out, 255, ADAPTIVE_THRESH_MEAN_C, THRESH_BINARY_INV, winSize, constant);
+}
+
+
+/**
+ * adaptive thresholding on GPU
+ */
+static void _gpu_threshold(InputArray _in, OutputArray _out, int winSize, double constant)
+{
+    if (_in.size().area() < 1)
+    {
+        return;
+    }
+    CV_Assert(winSize >= 3);
+    if(winSize % 2 == 0) winSize++; // win size must be odd
+
+
+    cuda::GpuMat gpuimageIn;
+
+    //upload image to GPU
+    if (!_in.isGpuMat())
+    {
+        gpuimageIn.upload(_in.getMat());
+    }else
+    {
+        gpuimageIn = _in.getGpuMat();
+    }
+
+    cuda::GpuMat gpuimageOut = cuda::GpuMat(gpuimageIn.size(), gpuimageIn.type());
+
+
+    auto imageInHandle = gpuimageIn.cudaPtr();
+    auto imageOutHandle = gpuimageOut.cudaPtr();
+
+
+    auto isContinous = gpuimageIn.isContinuous();
+    auto step = gpuimageIn.step;
+
+    dim3 threadsPerBlock(32,32);
+    dim3 numBlocks((gpuimageIn.cols + threadsPerBlock.x - 1) / threadsPerBlock.x,
+           (gpuimageIn.rows + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    //start kernel to process data
+    GpuKernelAdaptiveThresholdMeanCBinaryInv<<<numBlocks, threadsPerBlock>>>((char*) imageInHandle, (char*) imageOutHandle,
+            gpuimageIn.cols, gpuimageIn.rows, gpuimageIn.isContinuous() ,gpuimageIn.step, 255, winSize, constant);
+
+    //copy data back to cpu
+    gpuimageOut.download(_out);
+
 }
 
 
@@ -282,7 +334,7 @@ float static inline getAverageDistance(const std::vector<Point2f>& marker1, cons
 /**
  * @brief Initial steps on finding square candidates
  */
-static void _detectInitialCandidates(const Mat &grey, vector<vector<Point2f> > &candidates,
+void _detectInitialCandidates(const Mat &grey, vector<vector<Point2f> > &candidates,
                                      vector<vector<Point> > &contours,
                                      const DetectorParameters &params) {
 
@@ -308,7 +360,7 @@ static void _detectInitialCandidates(const Mat &grey, vector<vector<Point2f> > &
             int currScale = params.adaptiveThreshWinSizeMin + i * params.adaptiveThreshWinSizeStep;
             // threshold
             Mat thresh;
-            _threshold(grey, thresh, currScale, params.adaptiveThreshConstant);
+            _gpu_threshold(grey, thresh, currScale, params.adaptiveThreshConstant);
 
             // detect rectangles
             _findMarkerContours(thresh, candidatesArrays[i], contoursArrays[i],
@@ -325,6 +377,8 @@ static void _detectInitialCandidates(const Mat &grey, vector<vector<Point2f> > &
         }
     }
 }
+
+
 
 
 /**

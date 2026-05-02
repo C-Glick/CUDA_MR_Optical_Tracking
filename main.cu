@@ -1,5 +1,6 @@
 #include "main.cuh"
 #include "CameraStreamer.h"
+#include "aruco/GpuArucoDetector.cuh"
 
 //#include <opencv2/opencv.hpp>
 #include <fstream>
@@ -779,8 +780,9 @@ void openCvCameraTest()
         std::vector<int> markerIds;
         std::vector<std::vector<cv::Point2f>> markerCorners, rejectedCandidates;
         aruco::DetectorParameters detectorParams = aruco::DetectorParameters();
+        detectorParams.cornerRefinementMethod = aruco::CORNER_REFINE_NONE;
         cv::aruco::Dictionary dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::DICT_6X6_250);
-        cv::aruco::ArucoDetector detector(dictionary, detectorParams);
+        cv::aruco::GpuArucoDetector detector(dictionary, detectorParams);
         detector.detectMarkers(correctedLeftImage, markerCorners, markerIds, rejectedCandidates);
 
         size_t nMarkers = markerCorners.size();

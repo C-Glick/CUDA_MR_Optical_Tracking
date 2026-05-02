@@ -82,3 +82,47 @@ __global__ void GpuKernelRemapImage (cudaSurfaceObject_t inputImage,
         surf2Dwrite(temp, outputImage, col*numChannels, row);
     }
 }
+
+__global__ void GpuKernelAdaptiveThresholdMeanCBinaryInv (char* inputImage, char* outputImage, int width, int height,
+    bool isContinuous, int step, int maxValue, int blockSize, int C)
+{
+    int threadIndex = (blockIdx.x * blockDim.x) + threadIdx.x;
+    // Calculate global row and column for the thread
+    int home_col = blockIdx.x * blockDim.x + threadIdx.x;
+    int home_row = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int numChannels = 1;
+
+    //copy source pixel to destination pixel
+    //outputImage[row * step + col] = inputImage[row * step + col];
+
+    //compute the mean of neighborhood of pixels
+    int blockDelta = blockSize / 2;
+
+    float mean = 0;
+    for (int neighbor_x_delta = -blockDelta; neighbor_x_delta <= blockDelta; neighbor_x_delta++ )
+    {
+        for (int neighbor_y_delta = -blockDelta; neighbor_y_delta <= blockDelta; neighbor_y_delta++ )
+        {
+
+            //clamp pixel read on edges (same as edge replication)
+            int neighbor_x = max(0, min(home_col + neighbor_x_delta, width-1));
+            int neighbor_y = max(0, min(home_row + neighbor_y_delta, height-1));
+
+
+            mean += inputImage[neighbor_y * step + neighbor_x];
+        }
+    }
+
+    mean = mean / (blockSize * blockSize);
+
+    //if home pixel value is less than the mean - c, set its value to max
+    if (inputImage[home_row * step + home_col] < mean - C)
+    {
+        outputImage[home_row * step + home_col] = maxValue;
+    }else
+    {
+        outputImage[home_row * step + home_col] = 0;
+    }
+
+}
