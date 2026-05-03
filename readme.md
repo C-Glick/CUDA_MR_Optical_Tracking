@@ -50,13 +50,13 @@ This application demonstrates uses of CUDA to speed up Aruco marker tracking for
 - The built binary is located in the "cmake-build-*" folder and can be run with custom command line arguments
 - To compile manually instead of using `run.sh` :
     - Run cmake on the root of the project `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
-    - Next run `make -C ./cmake-build-debug` to compile the project
+    - Next run `cmake --build ./cmake-build-debug --config Debug --target CUDA_MR_Optical_Tracking -j $(nproc)` to compile the project
     - If compilation is successful run project with command `./cmake-build-release/CUDA_MR_Optical_Tracking`
-    - add the `--help` command line argument for full usage
+    - Run with the `--help` command line argument for full usage
 
 
 ## Project usage
-Once running, respond to the prompts in the terminal. It will ask if you'd like to use the found camera calibration from disk if there is one. Otherwise it will automatically start calibration. Follow the instructions in standard out to calibrate the camera. 
+Once running, respond to the prompts in the terminal. It will ask if you'd like to use the found camera calibration from disk if there is one. Otherwise it will automatically start calibration. Follow the instructions in the terminal to calibrate the camera. 
 
 One window will open that displays the camera feed to align the calibration pattern
 
