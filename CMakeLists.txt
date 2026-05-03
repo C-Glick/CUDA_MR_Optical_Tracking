@@ -4,24 +4,24 @@ project(CUDA_MR_Optical_Tracking CXX CUDA)
 #execute_process(COMMAND ../compile_opencv.sh
 #        COMMAND_ECHO STDOUT WORKING_DIRECTORY ../)
 
-add_executable(${PROJECT_NAME} main.cu
-        Cuda_Func.cu
-        Cuda_Func.cuh
-        main.cuh
+add_executable(${PROJECT_NAME} src/main.cu
+        src/Cuda_Func.cu
+        src/Cuda_Func.cuh
+        src/main.cuh
         external/nlohmann/json.hpp
-        CameraStreamer.cpp
-        CameraStreamer.h
-        aruco/GpuArucoDetector.cu
-        aruco/GpuArucoDetector.cuh
-        aruco/aruco_utils.cpp
-        aruco/aruco_utils.hpp
-        aruco/apriltag/apriltag_quad_thresh.cpp
-        aruco/apriltag/apriltag_quad_thresh.hpp
-        aruco/apriltag/predefined_dictonaries_apriltag.h
-        aruco/apriltag/unionfind.hpp
-        aruco/apriltag/zarray.hpp
-        aruco/apriltag/zmaxheap.hpp
-        aruco/apriltag/zmaxheap.cpp
+        src/CameraStreamer.cpp
+        src/CameraStreamer.h
+        src/aruco/GpuArucoDetector.cu
+        src/aruco/GpuArucoDetector.cuh
+        src/aruco/aruco_utils.cpp
+        src/aruco/aruco_utils.hpp
+        src/aruco/apriltag/apriltag_quad_thresh.cpp
+        src/aruco/apriltag/apriltag_quad_thresh.hpp
+        src/aruco/apriltag/predefined_dictonaries_apriltag.h
+        src/aruco/apriltag/unionfind.hpp
+        src/aruco/apriltag/zarray.hpp
+        src/aruco/apriltag/zmaxheap.hpp
+        src/aruco/apriltag/zmaxheap.cpp
 )
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules/")

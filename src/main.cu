@@ -21,7 +21,7 @@
 #include <cuda_runtime_api.h>
 #include <cuda_gl_interop.h>
 
-#include "external/nlohmann/json.hpp"
+#include "../external/nlohmann/json.hpp"
 using json = nlohmann::json;
 
 #define ESCAPE_KEY 27
