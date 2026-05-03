@@ -8,4 +8,4 @@ cmake --build ./cmake-build-debug --config Debug --target CUDA_MR_Optical_Tracki
 
 echo "—————===== Running the executable with recommended settings... =====—————"
 ./cmake-build-debug/CUDA_MR_Optical_Tracking --help
-./cmake-build-debug/CUDA_MR_Optical_Tracking --calibration=./camera_calibration --video=./GlickArucoSampleVideo.mp4
+./cmake-build-debug/CUDA_MR_Optical_Tracking --calibration=./camera_calibration --video=./GlickArucoSampleVideo.mp4 --noSteamVR
