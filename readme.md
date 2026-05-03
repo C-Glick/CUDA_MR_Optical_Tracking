@@ -1,14 +1,6 @@
 # Course Project: 3D Object Camera Tracking in VR / MR Headsets
 
-This application demonstrates uses of CUDA to augment Aruco marker tracking for mixed reality applications.
-
-Simplification: 
-- track an aruco tag in camera space and transform to world space using head pose
-- get raw image from cameras, pass onto GPU to do the warp
-- write CUDA kernels to process the aruco code detection and tracking
-- also send headset pose to GPU with time code
-- transform camera relative position to world position
-- send position back to application and use to render item
+This application demonstrates uses of CUDA to speed up Aruco marker tracking for mixed reality applications.
 
 ## Key features
 - Interaction between multiple libraries and technologies, OpenCV, CUDA, OpenVR, and OpenGL
@@ -17,7 +9,7 @@ Simplification:
 - Camera calibration
     - Calibration process to capture camera intrinsic properties used for distortion correction
     - Saves camera calibration to disk for later usage
-- Reads high definition video feed using OpenCV in real time 
+- Reads high definition usb video feed using OpenCV in real time 
     - CameraStreamer class with seperate capture thread to capture images in real time asynchronous of processing, ensures
       always working on the latest data if algorithm runs slower than frame rate
 - Integrates with OpenGL, Places captured data into OpenGL texture
@@ -26,7 +18,8 @@ Simplification:
 - Displays the corrected image directly to screen without copying back to CPU, CUDA hands access back to OpenGL for rendering
 - Implements adaptive thresholding in GPU during aruco code detection
     - Extended the ArucoDetector class from OpenCV with new class GpuArucoDetector. 
-    - GpuArucoDetector uses adaptive thresholding in CUDA to speed up parts of the tracking
+    - GpuArucoDetector uses adaptive thresholding in CUDA to speed up parts of the tracking (ideally more of the 
+    tracking computation would occur on the GPU but it is mostly linear and difficult to parallelize)
 - Uses OpenCV functions to find aruco codes in the image and tracks them in 3D space relative to the camera
 - Communicates with OpenVR to track VR headset position and translate aruco markers into world space coordinates
 
@@ -49,19 +42,17 @@ Simplification:
 
 
 ## compile OpenCV with CUDA support
-- build OpenCV with CUDA support and cuDNN support (python support disabled)
-(CUDA and cuDNN need to be installed before hand)
+- run `./compile_opencv.sh` from the root of the project, "CUDA_MR_Optical_Tracking". This will configure and compile OpenCV in the external/opencv folder. This builds OpenCV with CUDA and cuDNN support, both of which need to be installed before hand.
 - OpenCV takes a while to compile with all the extra modules so be aware this can take some time
 
-- run `./compile_opencv.sh` from the root of the project, "CUDA_MR_Optical_Tracking". This will configure and compile OpenCV in the external/opencv folder.
-
 ## compile project
-- Run `run.sh` in the root of the project, this uses cmake to configure and compile the project. It will then execute with recommended command line arguments.
+- Run `./run.sh` in the root of the project, this uses cmake to configure and compile the project. It will then execute with recommended command line arguments.
 - The built binary is located in the "cmake-build-*" folder and can be run with custom command line arguments
 - To compile manually instead of using `run.sh` :
-    - Run cmake on the root of the project, `cmake -S ./ -B ./cmake-build-release -D CMAKE_BUILD_TYPE=Release` or `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
-    - Next run `make -C ./cmake-build-release` to compile project
+    - Run cmake on the root of the project `cmake -S ./ -B ./cmake-build-debug -D CMAKE_BUILD_TYPE=Debug` for a debug build
+    - Next run `make -C ./cmake-build-debug` to compile the project
     - If compilation is successful run project with command `./cmake-build-release/CUDA_MR_Optical_Tracking`
+    - add the `--help` command line argument for full usage
 
 
 # clean project
@@ -79,3 +70,5 @@ Simplification:
 - High bandwidth usage for HD video steaming, encountered odd visual glitches
 - Cuda surfaces for texture memory storage and modifications
 - 3D graphics coordinate system transformations
+- Difficulty parallelizing an already established complex process, aruco code tracking
+- underestimated the complexity of the tracking system
