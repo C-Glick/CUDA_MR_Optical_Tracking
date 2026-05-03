@@ -3,6 +3,8 @@
 //
 
 #include "CameraStreamer.h"
+
+#include <fstream>
 using namespace cv;
 
 CameraStreamer::CameraStreamer(){}
@@ -24,6 +26,17 @@ CameraStreamer::CameraStreamer(int cameraId)
 
 CameraStreamer::CameraStreamer(String filename)
 {
+    //check that file name is valid
+    std::ifstream inFile(filename);
+    bool fileExists = inFile.is_open();
+    inFile.close();
+
+    if (!fileExists)
+    {
+        std::cerr << "Could not open video file '" << filename << "' aborting." << std::endl;
+        exit(-1);
+    }
+
     capture = cv::VideoCapture(filename);
     capture.set(CAP_PROP_BUFFERSIZE, 1);
     captureThread = std::thread(&CameraStreamer::cameraCaptureThread, this);

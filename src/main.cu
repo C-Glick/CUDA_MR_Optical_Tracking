@@ -104,6 +104,7 @@ int main(const int argc, char** argv)
 
 void initOpenVR()
 {
+    //todo make openvr stdout a different color or redirect to file
     vr::HmdError peError = vr::HmdError();
     //init open vr
     g_openVRSystem = vr::VR_Init( &peError, vr::EVRApplicationType::VRApplication_Overlay);

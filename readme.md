@@ -55,6 +55,18 @@ This application demonstrates uses of CUDA to speed up Aruco marker tracking for
     - add the `--help` command line argument for full usage
 
 
+## Project usage
+Once running, respond to the prompts in the terminal. It will ask if you'd like to use the found camera calibration from disk if there is one. Otherwise it will automatically start calibration. Follow the instructions in standard out to calibrate the camera. 
+
+One window will open that displays the camera feed to align the calibration pattern
+
+Once calibration is done the program will start the marker tracking loop and will either use the live camera feed, or pre recorded video.
+
+Several windows open to show various views of the application. The GPU Image window shows the corrected camera view and displayed directly from the GPU. The Marker Detection Left and Marker Detection Right views show the marker view from each camera. Move a marker in front of the camera to see the marker axis.
+
+Once done, press the ESC key over one of the windows to exit the application.
+
+
 # clean project
 - From the root of the project run `./clean_root.sh` this will remove the root project clean  
 - From the root of the project run `./clean_opencv.sh` this will remove the opencv build directory
