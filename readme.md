@@ -68,3 +68,14 @@ Simplification:
 - From the root of the project run `./clean_root.sh` this will remove the root project clean  
 - From the root of the project run `./clean_opencv.sh` this will remove the opencv build directory
 
+
+## Challenges
+- CPP verbose language 
+- Learning CMake 
+- OpenXR and OpenVR lack of support for camera integration
+- OpenCV systems and image processing
+- OpenCV interaction with CUDA
+- OpenCV compilation inside of a larger project
+- High bandwidth usage for HD video steaming, encountered odd visual glitches
+- Cuda surfaces for texture memory storage and modifications
+- 3D graphics coordinate system transformations

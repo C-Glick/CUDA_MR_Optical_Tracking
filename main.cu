@@ -196,7 +196,7 @@ void getHeadsetPose(vr::TrackedDevicePose_t pose)
 
         //rotation.x = pose.mdeviceToAbsoluteTracking.m[0][3];
 
-        std::cout << position.val[0] << " " << position.val[1] << " " << position.val[2] << std::endl;
+        std::cout << "Headset position: " << "x:" << position.val[0] << " y:" << position.val[1] << " z:" << position.val[2] << std::endl;
     }
 }
 
